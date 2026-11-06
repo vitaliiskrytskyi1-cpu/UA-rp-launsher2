@@ -269,7 +269,7 @@ stock LocalMessage(playerid, Float:radius, colour, const text[])
 	new Float:x, Float:y, Float:z;
 	GetPlayerPos(playerid, x, y, z);
 	new vw = GetPlayerVirtualWorld(playerid);
-	for (new i = 0, j = GetPlayerPoolSize(); i <= j; i++)
+	for (new i = 0; i < MAX_PLAYERS; i++)
 	{
 		if (!IsPlayerConnected(i) || !P[i][pLogged]) continue;
 		if (GetPlayerVirtualWorld(i) != vw) continue;
@@ -282,7 +282,7 @@ stock LocalMessage(playerid, Float:radius, colour, const text[])
 
 stock AdminMessage(colour, const text[])
 {
-	for (new i = 0, j = GetPlayerPoolSize(); i <= j; i++)
+	for (new i = 0; i < MAX_PLAYERS; i++)
 	{
 		if (IsPlayerConnected(i) && P[i][pAdmin] > 0)
 		{
@@ -506,7 +506,7 @@ public OnGameModeInit()
 
 public OnGameModeExit()
 {
-	for (new i = 0, j = GetPlayerPoolSize(); i <= j; i++)
+	for (new i = 0; i < MAX_PLAYERS; i++)
 	{
 		if (IsPlayerConnected(i)) Acc_Save(i);
 	}
@@ -917,7 +917,7 @@ public MinuteTimer()
 	gettime(h, m, s);
 	if (m == 0) SetWorldTime(h);
 
-	for (new i = 0, j = GetPlayerPoolSize(); i <= j; i++)
+	for (new i = 0; i < MAX_PLAYERS; i++)
 	{
 		if (!IsPlayerConnected(i) || !P[i][pLogged]) continue;
 		P[i][pMinutes]++;
@@ -1031,7 +1031,7 @@ public OnPlayerStateChange(playerid, PLAYER_STATE:newstate, PLAYER_STATE:oldstat
 	if (newstate == PLAYER_STATE_DRIVER)
 	{
 		new veh = GetPlayerVehicleID(playerid);
-		for (new i = 0, j = GetPlayerPoolSize(); i <= j; i++)
+		for (new i = 0; i < MAX_PLAYERS; i++)
 		{
 			if (i != playerid && IsPlayerConnected(i) && P[i][pCarVeh] == veh)
 			{
@@ -1054,7 +1054,7 @@ public OnPlayerStateChange(playerid, PLAYER_STATE:newstate, PLAYER_STATE:oldstat
 
 public OnVehicleDeath(vehicleid, killerid)
 {
-	for (new i = 0, j = GetPlayerPoolSize(); i <= j; i++)
+	for (new i = 0; i < MAX_PLAYERS; i++)
 	{
 		if (!IsPlayerConnected(i)) continue;
 		if (P[i][pTruck] == vehicleid)
