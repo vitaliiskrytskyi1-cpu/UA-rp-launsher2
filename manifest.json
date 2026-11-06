@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "launcher_version": 1,
+  "launcher_url": "",
+  "files": [
+    {
+      "path": "hud/readme.txt",
+      "size": 166,
+      "sha256": "2c805925912c513577bc3f50966f661014eb2972dbbfa417750212770d7a40ed"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Іконка: жовто-блакитна емблема з літерами UA. Замініть на свій логотип за бажанням -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FF0057B7" android:pathData="M30,30h48v24h-48z" />
+    <path android:fillColor="#FFFFD700" android:pathData="M30,54h48v24h-48z" />
+    <!-- U -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M38,40h5v16c0,3 2,4 4,4s4,-1 4,-4v-16h5v16c0,6 -4,9 -9,9s-9,-3 -9,-9z" />
+    <!-- A -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M62,65l7,-25h4l7,25h-5l-1.5,-6h-6l-1.5,6zM67.5,55h4l-2,-8z" />
+</vector>

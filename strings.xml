@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">UA RolePlay</string>
+    <string name="status_checking">Перевіряю сервер…</string>
+    <string name="status_online">Сервер онлайн</string>
+    <string name="status_offline">Сервер недоступний</string>
+    <string name="nick_label">Ваш нік (Ім\'я_Прізвище)</string>
+    <string name="nick_hint">Taras_Shevchenko</string>
+    <string name="nick_error">Нік має бути у форматі Ім\'я_Прізвище латиницею, наприклад Ivan_Petrenko (3–20 символів)</string>
+    <string name="play">Грати</string>
+    <string name="update">Оновити файли</string>
+    <string name="news">Новини</string>
+    <string name="news_loading">Завантажую новини…</string>
+    <string name="news_error">Не вдалося завантажити новини. Перевірте інтернет.</string>
+    <string name="news_empty">Поки що новин немає.</string>
+    <string name="update_checking">Перевіряю оновлення…</string>
+    <string name="update_ok">Усі файли актуальні</string>
+    <string name="update_needed">Потрібно завантажити %1$d файл(ів), %2$s</string>
+    <string name="update_progress">Завантаження: %1$s / %2$s</string>
+    <string name="update_error">Помилка оновлення: %1$s</string>
+    <string name="update_offline">Немає зв\'язку з сервером оновлень</string>
+    <string name="gta_missing_title">Потрібна GTA San Andreas</string>
+    <string name="gta_missing_text">Для гри потрібна офіційна GTA: San Andreas з Google Play. Встановіть її, запустіть один раз і поверніться в лаунчер.</string>
+    <string name="client_missing_title">Ігровий клієнт не встановлено</string>
+    <string name="client_missing_text">Не знайдено ігровий клієнт сервера. Завантажте його за посиланням у новинах або в нашому Telegram.</string>
+    <string name="launcher_update_title">Доступна нова версія лаунчера</string>
+    <string name="launcher_update_text">Оновіть лаунчер, щоб грати на сервері.</string>
+    <string name="open_play">Відкрити Google Play</string>
+    <string name="download">Завантажити</string>
+    <string name="later">Пізніше</string>
+    <string name="ok">Зрозуміло</string>
+</resources>
