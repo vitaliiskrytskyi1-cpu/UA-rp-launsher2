@@ -4,9 +4,39 @@
   "launcher_url": "",
   "files": [
     {
-      "path": "hud/readme.txt",
-      "size": 166,
-      "sha256": "2c805925912c513577bc3f50966f661014eb2972dbbfa417750212770d7a40ed"
+      "path": "hud/armor.png",
+      "size": 1074,
+      "sha256": "4e79e9d81eaea6ce6f0669a1a5e0d83d63d6d76ba4a9b29930bdf362b8b04993"
+    },
+    {
+      "path": "hud/food.png",
+      "size": 1216,
+      "sha256": "c575ea467858a3ab67983a974fae7c26884a97bd6df2ec4cd3e15d808cabce2f"
+    },
+    {
+      "path": "hud/health.png",
+      "size": 1119,
+      "sha256": "c9cf3cf8c2581f601abe5fb4e0be29da349bf821a424160caa0dbf3bbe749462"
+    },
+    {
+      "path": "hud/logo.png",
+      "size": 31909,
+      "sha256": "71540ffe1582d118f9b9f6ae5a87050a57e99015d56b0fbd12d4f54d0aec3030"
+    },
+    {
+      "path": "hud/logo_small.png",
+      "size": 6659,
+      "sha256": "3d1f68e21613532ceb691ecee80a6bdd38763cea3d064afd886a964c792ba22f"
+    },
+    {
+      "path": "hud/money.png",
+      "size": 2403,
+      "sha256": "dd882d6e6fc39a8bfed0d59071c431005671a821ad4e854acad178d3d7e78740"
+    },
+    {
+      "path": "loadscreen/loadscreen.jpg",
+      "size": 162376,
+      "sha256": "56fecd6b1079e471739e7c6d987bc899bedb0cc73d4d88779c5728e880b744a2"
     }
   ]
 }

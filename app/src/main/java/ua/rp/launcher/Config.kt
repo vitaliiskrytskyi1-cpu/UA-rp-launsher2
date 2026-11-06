@@ -16,7 +16,7 @@ object Config {
      * Адреса папки на хостингу, де лежать news.json і manifest.json
      * (наприклад, GitHub Pages або ваш VPS). Обов'язково https і зі слешем у кінці.
      */
-    const val CDN_URL = "https://example.com/uarp/"
+    const val CDN_URL = "https://raw.githubusercontent.com/vitaliiskrytskyi1-cpu/UA-rp-launsher2/main/hosting/"
 
     /** Пакет ігрового клієнта SA:MP для Android, який запускає кнопка «Грати». */
     const val CLIENT_PACKAGE = "com.samp.mobile"
