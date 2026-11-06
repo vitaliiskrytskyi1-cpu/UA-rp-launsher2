@@ -9,7 +9,7 @@ object Config {
     const val SERVER_NAME = "UA RolePlay"
 
     /** IP або домен вашого open.mp сервера і порт. */
-    const val SERVER_HOST = "127.0.0.1"
+    const val SERVER_HOST = "37.248.160.130"
     const val SERVER_PORT = 7777
 
     /**
