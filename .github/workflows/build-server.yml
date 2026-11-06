@@ -1,0 +1,78 @@
+name: Build Server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - ".github/workflows/build-server.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download open.mp server and Pawn compiler
+        run: |
+          set -x
+          mkdir -p dl && cd dl
+          gh release view -R openmultiplayer/open.mp --json tagName,assets -q '.tagName, .assets[].name'
+          gh release download -R openmultiplayer/open.mp --pattern "*win-x86.zip"
+          gh release view -R openmultiplayer/compiler --json tagName,assets -q '.tagName, .assets[].name'
+          gh release download -R openmultiplayer/compiler --pattern "*linux*"
+          ls -la
+          unzip -q *win-x86.zip -d omp
+          mkdir pawnc && tar -xzf *linux*.tar.gz -C pawnc
+          find pawnc -maxdepth 3 | head -20
+          find omp -maxdepth 2 | head -40
+
+      - name: Compile gamemode
+        run: |
+          set -o pipefail
+          sudo apt-get install -y -qq libc6-i386 >/dev/null 2>&1 || true
+          SERVER=$(dirname "$(find dl/omp -name 'omp-server.exe' | head -1)")
+          echo "SERVER=$SERVER" >> "$GITHUB_ENV"
+          PAWNCC=$(find dl/pawnc -name pawncc -type f | head -1)
+          LIBDIR=$(dirname "$(find dl/pawnc -name 'libpawnc.so' | head -1)")
+          chmod +x "$PAWNCC"
+          INC="$SERVER/qawno/include"
+          [ -d "$INC" ] || { git clone -q --depth 1 https://github.com/openmultiplayer/omp-stdlib inc; INC=inc; }
+          mkdir -p build
+          # Українські літери: UTF-8 -> Windows-1251
+          iconv -f UTF-8 -t CP1251 server/gamemodes/uarp.pwn > build/uarp.pwn
+          cd build
+          LD_LIBRARY_PATH="$GITHUB_WORKSPACE/$LIBDIR" "$GITHUB_WORKSPACE/$PAWNCC" uarp.pwn -i"$GITHUB_WORKSPACE/$INC" -ouarp.amx -d0 -O1 2>&1 | tee compile.log
+          ls -la uarp.amx
+
+      - name: Package server
+        run: |
+          cp build/uarp.amx "$SERVER/gamemodes/"
+          cp build/uarp.pwn "$SERVER/gamemodes/"
+          mkdir -p "$SERVER/scriptfiles"
+          python3 server/tools/make_config.py "$SERVER/config.json"
+          cp server/START.txt "$SERVER/"
+          printf '@echo off\ncd /d "%%~dp0"\nomp-server.exe\npause\n' > "$SERVER/start-server.bat"
+          rm -rf pkg && mkdir pkg && cp -r "$SERVER" pkg/UA-RolePlay-Server
+          cd pkg && zip -qr ../UA-RolePlay-Server.zip UA-RolePlay-Server
+          ls -la ../UA-RolePlay-Server.zip
+
+      - name: Save to branch server-build
+        if: always()
+        run: |
+          mkdir -p /tmp/out
+          cp build/compile.log /tmp/out/ 2>/dev/null || echo "no compile log" > /tmp/out/compile.log
+          cp UA-RolePlay-Server.zip /tmp/out/ 2>/dev/null || true
+          cd /tmp/out
+          git init -q -b server-build
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A
+          git commit -qm "Server build ${{ github.sha }} (${{ job.status }})"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" server-build
