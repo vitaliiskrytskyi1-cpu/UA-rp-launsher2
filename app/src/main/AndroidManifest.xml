@@ -8,7 +8,7 @@
     <queries>
         <package android:name="com.rockstargames.gtasa" />
         <!-- Якщо змінюєте CLIENT_PACKAGE у Config.kt, змініть і тут -->
-        <package android:name="gta.ua.apk" />
+        <package android:name="com.samp.mobile" />
         <package android:name="com.android.vending" />
     </queries>
 
