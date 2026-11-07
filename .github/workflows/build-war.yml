@@ -117,6 +117,7 @@ jobs:
           mkdir -p /tmp/out
           cp war-game/*.log war-game/smoke.txt /tmp/out/ 2>/dev/null || true
           cp war-game/build/UAWarFront.apk /tmp/out/ 2>/dev/null || true
+          if [ -f /tmp/out/UAWarFront.apk ]; then (cd /tmp/out && split -b 90m UAWarFront.apk UAWarFront.apk.part- && rm UAWarFront.apk); fi
           cp UA-WarFront-Server.zip /tmp/out/ 2>/dev/null || true
           cd /tmp/out
           git init -q -b war-build
