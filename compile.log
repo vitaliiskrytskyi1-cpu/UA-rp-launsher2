@@ -1,0 +1,6 @@
+uarp.pwn(1089) : warning 234: function is deprecated (symbol "SHA256_PassHash") Use BCrypt for hashing passwords. For other purposes use SHA256_Hash
+uarp.pwn(1119) : warning 234: function is deprecated (symbol "SHA256_PassHash") Use BCrypt for hashing passwords. For other purposes use SHA256_Hash
+Pawn compiler 3.10.11	 	 	Copyright (c) 1997-2006, ITB CompuPhase
+
+
+2 Warnings.
