@@ -26,7 +26,7 @@ const RECON_LIFETIME := 180.0
 const BOT_NAMES := ["Сокіл", "Грім", "Вовк", "Тайфун", "Шершень", "Беркут", "Барс", "Скіф", "Яструб", "Сич", "Рись", "Буревій", "Кремінь", "Лис", "Граніт", "Ворон"]
 static var _fpv_scene: PackedScene
 
-const VERSION := 8
+const VERSION := 9
 const DEFAULT_ADDR := "147.185.221.217:11983"
 const DEFAULT_PORT := 7000
 const MAX_PLAYERS := 40
