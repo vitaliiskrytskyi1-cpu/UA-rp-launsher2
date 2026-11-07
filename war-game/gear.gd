@@ -2,6 +2,9 @@ extends RefCounted
 ## Каталог спорядження і економіка. Спільний для сервера і клієнта.
 
 const START_MONEY := 4000
+## Тестовий режим: гроші не закінчуються.
+const UNLIMITED_MONEY := true
+const UNLIMITED_AMOUNT := 9999999
 const FPV_PRICE := 400
 const FPV_WEIGHT := 1.5
 const MAG_WEIGHT := 0.5
@@ -74,7 +77,7 @@ static func catalog(cat: String) -> Dictionary:
 
 static func new_profile() -> Dictionary:
 	return {
-		"money": START_MONEY,
+		"money": UNLIMITED_AMOUNT if UNLIMITED_MONEY else START_MONEY,
 		"owned": ["w:aks74u", "a:none", "h:none", "r:none", "p:none", "x:none", "a:a2", "p:s"],
 		"eq": {"w": "aks74u", "a": "a2", "h": "none", "r": "none", "p": "s", "x": "none"},
 		"kit3": true,
@@ -99,6 +102,8 @@ static func fix_profile(p: Dictionary) -> Dictionary:
 			p.eq["a"] = "a2"
 		if p.eq.get("p", "none") == "none":
 			p.eq["p"] = "s"
+	if UNLIMITED_MONEY:
+		p["money"] = UNLIMITED_AMOUNT
 	if not p.has("heavy_ammo") or typeof(p.heavy_ammo) != TYPE_DICTIONARY:
 		p.heavy_ammo = {"rpg": 0, "mortar": 0}
 	for c in ["w", "a", "h", "r", "p", "x"]:

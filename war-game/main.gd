@@ -252,6 +252,13 @@ func _in_base(p: Dictionary) -> bool:
 	return Vector2(p.pos.x, p.pos.z - bz).length() < BASE_RADIUS
 
 
+func _spend(prof: Dictionary, amount: int) -> void:
+	if Gear.UNLIMITED_MONEY:
+		prof.money = Gear.UNLIMITED_AMOUNT
+	else:
+		prof.money = int(prof.money) - amount
+
+
 func _give_money(id: int, amount: int, reason: String) -> void:
 	if not players.has(id):
 		return
@@ -463,7 +470,7 @@ func srv_buy(cat: String, key: String, qty: int) -> void:
 				if int(prof.money) < price:
 					rpc_id(id, "cl_msg", "Недостатньо грошей.")
 					return
-				prof.money = int(prof.money) - price
+				_spend(prof, price)
 				prof.owned.append(tag)
 				msg = "Куплено: %s" % c[key].name
 			else:
@@ -480,7 +487,7 @@ func srv_buy(cat: String, key: String, qty: int) -> void:
 			if int(prof.money) < cost:
 				rpc_id(id, "cl_msg", "Недостатньо грошей.")
 				return
-			prof.money = int(prof.money) - cost
+			_spend(prof, cost)
 			prof.fpv = int(prof.fpv) + qty
 			msg = "Куплено FPV-дронів: %d" % qty
 		"mag":
@@ -490,7 +497,7 @@ func srv_buy(cat: String, key: String, qty: int) -> void:
 			if int(prof.money) < cost:
 				rpc_id(id, "cl_msg", "Недостатньо грошей.")
 				return
-			prof.money = int(prof.money) - cost
+			_spend(prof, cost)
 			prof.mags[key] = int(prof.mags.get(key, 0)) + qty
 			msg = "Куплено магазинів: %d" % qty
 		"hammo":
@@ -500,7 +507,7 @@ func srv_buy(cat: String, key: String, qty: int) -> void:
 			if int(prof.money) < cost:
 				rpc_id(id, "cl_msg", "Недостатньо грошей.")
 				return
-			prof.money = int(prof.money) - cost
+			_spend(prof, cost)
 			prof.heavy_ammo[key] = int(prof.heavy_ammo.get(key, 0)) + qty
 			msg = "Куплено: %s × %d" % [Gear.HEAVY[key].ammo_name, qty]
 		_:
