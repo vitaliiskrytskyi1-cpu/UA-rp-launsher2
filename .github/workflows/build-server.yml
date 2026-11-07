@@ -69,6 +69,7 @@ jobs:
           mkdir -p /tmp/out
           cp build/compile.log /tmp/out/ 2>/dev/null || echo "no compile log" > /tmp/out/compile.log
           cp UA-RolePlay-Server.zip /tmp/out/ 2>/dev/null || true
+          cp build/uarp.amx /tmp/out/ 2>/dev/null || true
           cd /tmp/out
           git init -q -b server-build
           git config user.name "github-actions"
