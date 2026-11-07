@@ -114,7 +114,9 @@ func _ready() -> void:
 
 func _load_profile(nick: String) -> Dictionary:
 	var key := nick.to_lower()
-	var p = profiles_cfg.get_value("p", key, null)
+	var p = null
+	if profiles_cfg.has_section_key("p", key):
+		p = profiles_cfg.get_value("p", key)
 	if typeof(p) != TYPE_DICTIONARY:
 		p = Gear.new_profile()
 	return Gear.fix_profile(p)
@@ -997,11 +999,10 @@ func buy(cat: String, key: String, qty: int = 1) -> void:
 
 func bot_shop_test() -> void:
 	# автотест магазину: купити АК-74, рюкзак, дрони, броню
-	buy("w", "ak74")
-	buy("p", "m")
-	buy("fpv", "", 2)
-	buy("a", "a2")
-	buy("mag", "ak74", 3)
+	buy("p", "s")
+	buy("fpv", "", 1)
+	buy("mag", "aks74u", 2)
+	buy("h", "h1")
 	print("[BOT] shop test sent")
 
 

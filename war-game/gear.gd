@@ -1,7 +1,7 @@
 extends RefCounted
 ## Каталог спорядження і економіка. Спільний для сервера і клієнта.
 
-const START_MONEY := 2500
+const START_MONEY := 4000
 const FPV_PRICE := 400
 const FPV_WEIGHT := 1.5
 const MAG_WEIGHT := 0.5
@@ -45,7 +45,7 @@ const RIG := {
 const RIG_ORDER := ["none", "light", "assault"]
 
 const PACK := {
-	"none": {"name": "Без рюкзака", "price": 0, "drones": 0, "mags": 0, "heavy": 1, "weight": 0.0},
+	"none": {"name": "Без рюкзака", "price": 0, "drones": 1, "mags": 0, "heavy": 1, "weight": 0.0},
 	"s": {"name": "Малий рюкзак", "price": 600, "drones": 1, "mags": 1, "heavy": 2, "weight": 0.8},
 	"m": {"name": "Середній рюкзак", "price": 1500, "drones": 2, "mags": 2, "heavy": 3, "weight": 1.5},
 	"l": {"name": "Великий рейдовий рюкзак", "price": 3000, "drones": 4, "mags": 3, "heavy": 5, "weight": 2.5},
