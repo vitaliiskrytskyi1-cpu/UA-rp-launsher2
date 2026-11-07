@@ -36,14 +36,25 @@ func setup(m) -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
 
+const UI = preload("res://uikit.gd")
+
+
 func open() -> void:
-	show()
+	if visible:
+		return
 	_ensure_view()
 	_refresh_model()
+	UI.fade_in(self)
+
+
+func close() -> void:
+	_close()
 
 
 func _close() -> void:
-	hide()
+	if not visible or modulate.a < 0.99:
+		return
+	UI.fade_out(self)
 	main.on_bag_closed()
 
 

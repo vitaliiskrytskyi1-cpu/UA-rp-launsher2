@@ -64,7 +64,7 @@ jobs:
         working-directory: war-game
         run: |
           set +e
-          timeout 40 ~/godot/godot --headless --path . -- --server --port=7000 > server.log 2>&1 &
+          timeout 40 ~/godot/godot --headless --path . -- --server --port=7000 --countdown=3 > server.log 2>&1 &
           sleep 5
           timeout 28 ~/godot/godot --headless --path . -- --bot --host=127.0.0.1 --port=7000 --map=1 > bot1.log 2>&1 &
           sleep 1

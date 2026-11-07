@@ -12,6 +12,7 @@ const TRENCH_D := 1.9
 const TRENCH_X := 140.0
 
 static var _mats := {}
+const Settings = preload("res://settings.gd")
 
 ## Карти. «field» — генерована лінія фронту, решта — 3D-скани хуторів Фарерських островів
 ## (Національний музей Фарер, CC0). half — половина розміру, base — відстань баз від центру.
@@ -20,6 +21,7 @@ const MAPS := [
 	{"id": "groth", "name": "Ґротхустанґі", "file": "groth", "half": 38.9, "hz": 59.7, "b0": Vector2(0.0, -46.0), "b1": Vector2(0.0, 46.0), "base_r": 12.0, "cap": 9.0, "hmin": -10.2},
 	{"id": "heima", "name": "Гейма-ї-Гусі", "file": "heima", "half": 45.4, "hz": 52.0, "b0": Vector2(-7.8, -26.0), "b1": Vector2(7.8, 26.0), "base_r": 9.0, "cap": 8.0, "hmin": -7.5},
 	{"id": "leirvik", "name": "Лейрвік", "file": "leirvik", "half": 121.0, "hz": 110.5, "b0": Vector2(0.0, -54.0), "b1": Vector2(18.0, 78.0), "base_r": 16.0, "cap": 11.0, "hmin": -9.0},
+	{"id": "trenches", "name": "Окопи", "file": "trenches", "half": 38.4, "hz": 74.8, "b0": Vector2(-20.0, 62.0), "b1": Vector2(20.0, -62.0), "base_r": 8.0, "cap": 9.0, "hmin": -3.0, "floor": true, "no_bags": true},
 	{"id": "depil", "name": "Депіль", "file": "depil", "half": 116.4, "hz": 103.1, "b0": Vector2(-11.6, -70.0), "b1": Vector2(11.6, 75.0), "base_r": 16.0, "cap": 11.0, "hmin": -18.0},
 ]
 static var cur: Dictionary = MAPS[0]
@@ -93,6 +95,8 @@ static func _env(w: Node3D, fog: float) -> void:
 	sun.light_color = Color(1.0, 0.95, 0.86)
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 60.0
+	sun.add_to_group("sun")
+	sun.shadow_enabled = int(Settings.value("graphics", "shadows", 1)) == 1
 	w.add_child(sun)
 
 
@@ -141,7 +145,9 @@ static func _build_scan(parent: Node, visuals: bool) -> Node3D:
 	for s in [-1.0, 1.0]:
 		_col_box(w, Vector3(1.0, 300.0, hz * 2.0), Vector3(s * (hx - 1.5), 0.0, 0.0))
 		_col_box(w, Vector3(hx * 2.0, 300.0, 1.0), Vector3(0.0, 0.0, s * (hz - 1.5)))
-	_scan_trenches(w, visuals)
+	if not cur.has("no_bags"):
+		_scan_trenches(w, visuals)
+	_scan_props(w, visuals)
 	if visuals:
 		_env(w, 0.004)
 		var we := w.get_child(w.get_child_count() - 2) as WorldEnvironment
@@ -153,6 +159,8 @@ static func _build_scan(parent: Node, visuals: bool) -> Node3D:
 			var terrain: Node3D = scn.instantiate()
 			w.add_child(terrain)
 			_no_shadows(terrain)
+		if cur.has("floor"):
+			_floor_fill(w, file)
 		# море/долина навколо, щоб не було порожнечі за краєм
 		var sea := MeshInstance3D.new()
 		var pm := PlaneMesh.new()
@@ -198,6 +206,56 @@ static func _build_hgrid(faces: PackedVector3Array) -> void:
 
 ## Лінії укріплень на скані: бруствери з мішків з піском і дерев'яні стійки, по рельєфу.
 ## По одній лінії перед кожною базою (поперек напрямку на точку) і дві короткі біля центру.
+## Земля між модулями карти «Окопи» (прямокутники з maps/<file>_floor.json).
+static func _floor_fill(w: Node3D, file: String) -> void:
+	var f := FileAccess.open("res://maps/%s_floor.json" % file, FileAccess.READ)
+	if f == null:
+		return
+	var d = JSON.parse_string(f.get_as_text())
+	f.close()
+	if typeof(d) != TYPE_DICTIONARY:
+		return
+	var y := float(d.y)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_normal(Vector3.UP)
+	for r in d.rects:
+		var x0 := float(r[0])
+		var z0 := float(r[1])
+		var x1 := x0 + float(r[2])
+		var z1 := z0 + float(r[3])
+		for v in [Vector3(x0, y, z0), Vector3(x1, y, z0), Vector3(x1, y, z1), Vector3(x0, y, z0), Vector3(x1, y, z1), Vector3(x0, y, z1)]:
+			st.set_uv(Vector2(v.x, v.z) * 0.25)
+			st.add_vertex(v)
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	var m := tex_mat("forrest_ground_01", Color(0.34, 0.39, 0.22), 0.25, Color(0.95, 1.0, 0.9))
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mi.material_override = m
+	w.add_child(mi)
+
+
+## Бронетранспортери М113 біля баз (модель і колізія).
+static func _scan_props(w: Node3D, visuals: bool) -> void:
+	for t in 2:
+		var bp := base_pos(t)
+		var dir := (-bp).normalized()
+		var side := Vector2(-dir.y, dir.x)
+		var p2 := bp + side * (float(cur.base_r) + 4.0)
+		var y := ground_y(w, p2.x, p2.y, -9999.0)
+		if y < -9000.0:
+			continue
+		var yaw := atan2(dir.x, dir.y)
+		_col_box(w, Vector3(3.0, 2.4, 5.3), Vector3(p2.x, y + 1.2, p2.y), Vector3(0.0, yaw, 0.0))
+		if visuals and ResourceLoader.exists("res://models/m113.glb"):
+			var ps = load("res://models/m113.glb")
+			if ps:
+				var apc: Node3D = ps.instantiate()
+				apc.position = Vector3(p2.x, y, p2.y)
+				apc.rotation.y = yaw
+				w.add_child(apc)
+
+
 static func _scan_trenches(w: Node3D, visuals: bool) -> void:
 	var m_bag := tex_mat("hessian_230", Color(0.56, 0.5, 0.36), 0.8, Color(0.85, 0.78, 0.6))
 	var m_plank := tex_mat("weathered_brown_planks", Color(0.42, 0.32, 0.22), 0.45)
@@ -423,6 +481,8 @@ static func build(parent: Node, visuals: bool, map_idx: int = 0) -> Node3D:
 		sun.light_color = Color(1.0, 0.95, 0.86)
 		sun.shadow_enabled = true
 		sun.directional_shadow_max_distance = 60.0
+		sun.add_to_group("sun")
+		sun.shadow_enabled = int(Settings.value("graphics", "shadows", 1)) == 1
 		w.add_child(sun)
 
 	# ---------------------------------------------------------------- земля з викопаними окопами
@@ -799,7 +859,8 @@ static func _grass(w: Node3D) -> void:
 				mmi.multimesh = mm
 				mmi.material_override = gm
 				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-				mmi.visibility_range_end = 55.0
+				mmi.visibility_range_end = 55.0 * float(Settings.value("graphics", "grass", 1.0))
+				mmi.add_to_group("grass")
 				mmi.visibility_range_end_margin = 8.0
 				mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
 				mmi.position = center

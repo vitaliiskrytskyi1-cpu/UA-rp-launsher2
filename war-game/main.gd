@@ -13,9 +13,14 @@ const HudMap = preload("res://hudmap.gd")
 const Inventory = preload("res://inventory.gd")
 const HitHud = preload("res://hithud.gd")
 const TopHud = preload("res://tophud.gd")
+const Menu = preload("res://menu.gd")
+const HudEdit = preload("res://hudedit.gd")
+const SettingsPanel = preload("res://settings_panel.gd")
+const Settings = preload("res://settings.gd")
+const UI = preload("res://uikit.gd")
 static var _fpv_scene: PackedScene
 
-const VERSION := 7
+const VERSION := 8
 const DEFAULT_ADDR := "147.185.221.217:11983"
 const DEFAULT_PORT := 7000
 const MAX_PLAYERS := 40
@@ -27,7 +32,7 @@ const BASE_Z := 120.0
 const BASE_RADIUS := 32.0
 const SNAP_RATE := 0.1
 const SNAP_FIELDS := 11
-const TEAM_NAMES := ["Сині", "Жовті"]
+const TEAM_NAMES := ["Штурм", "Оборона"]
 const TEAM_COLORS := [Color(0.25, 0.5, 1.0), Color(1.0, 0.8, 0.15)]
 const PROFILES_PATH := "user://profiles.cfg"
 
@@ -52,9 +57,17 @@ var capture := 0.0
 var round_over := false
 var cfg_port := DEFAULT_PORT
 var profile := {}
+## Стан матчу на сервері: "waiting" — збір у лобі з відліком, "running" — бій, "ended" — підсумки раунду.
+var match_state := "waiting"
+var match_count := 0.0
+var cfg_countdown := 20.0
+var lobby_t := 0.0
+## Клієнт: останні дані лобі і моя роль
+var lobby := {}
+var my_role := ""
+var in_match := false
 var map_index := 0
 var map_pref := 0
-var map_btns: Array = []
 
 # сервер
 var snap_t := 0.0
@@ -72,9 +85,12 @@ var save_dirty := false
 # інтерфейс
 var ui: CanvasLayer
 var menu: Control
-var nick_edit: LineEdit
-var addr_edit: LineEdit
 var status_lbl: Label
+var settings_panel: Control
+var hud_editor: Control
+var auto_pick := false
+var retry_t := 0.0
+var music: AudioStreamPlayer
 var hud: Control
 var hp_lbl: Label
 var ammo_lbl: Label
@@ -116,6 +132,8 @@ func _ready() -> void:
 	for a in args:
 		if a.begins_with("--port="):
 			cfg_port = int(a.substr(7))
+		elif a.begins_with("--countdown="):
+			cfg_countdown = float(a.substr(12))
 		elif a.begins_with("--host="):
 			host = a.substr(7)
 		elif a.begins_with("--map="):
@@ -124,10 +142,12 @@ func _ready() -> void:
 		start_server()
 	elif args.has("--bot"):
 		is_bot = true
+		auto_pick = true
 		_build_client_world()
 		connect_to(host, cfg_port, "Bot_%d" % (randi() % 1000))
 	elif args.has("--autojoin"):
 		# перевірка інтерфейсу: вхід без меню і знімок екрана
+		auto_pick = true
 		_build_client_world()
 		_build_ui()
 		connect_to(host, cfg_port, "Tester")
@@ -138,8 +158,42 @@ func _ready() -> void:
 					get_viewport().get_texture().get_image().save_png(path)
 					get_tree().quit())
 	else:
+		for a3 in args:
+			if a3.begins_with("--nick="):
+				Settings.set_value("main", "nick", a3.substr(7))
+			elif a3.begins_with("--addr="):
+				Settings.set_value("main", "addr", a3.substr(7))
 		_build_client_world()
 		_build_ui()
+		if menu.has_nick():
+			menu_connect(true)
+		# перевірка меню: --menu=<екран> --shot=<файл>
+		for a2 in args:
+			if a2.begins_with("--menu="):
+				var scr := a2.substr(7)
+				get_tree().create_timer(4.0).timeout.connect(func():
+					if scr == "hudedit":
+						hud.show()
+						open_hud_editor()
+					elif scr == "settings":
+						open_settings(false)
+					else:
+						if scr in ["team", "role", "wait"] and connected:
+							request_enter(menu.sel_map)
+						if scr == "role":
+							menu.sel_team = 0
+							menu.sel_role = "fpv"
+						menu.go(scr))
+			elif a2.begins_with("--shot="):
+				var path2 := a2.substr(7)
+				get_tree().create_timer(14.0).timeout.connect(func():
+					get_viewport().get_texture().get_image().save_png(path2)
+					get_tree().quit())
+	if not is_server:
+		get_tree().set_quit_on_go_back(false)
+		Settings.apply(get_tree())
+		if not is_bot:
+			_start_music()
 
 
 # =====================================================================
@@ -192,6 +246,7 @@ func _on_peer_disconnected(id: int) -> void:
 		_save_profile(id)
 		players.erase(id)
 		rpc("cl_remove_player", id)
+		_lobby_broadcast()
 
 
 func _team_count(t: int) -> int:
@@ -209,6 +264,7 @@ func _new_pdata(nick: String, team: int, prof: Dictionary) -> Dictionary:
 		"dpos": Vector3.ZERO, "dyaw": 0.0, "kills": 0, "deaths": 0,
 		"respawn": 0.0, "drone_t": 0.0, "last_fire": 0, "last_heavy": 0,
 		"in_mag": 0, "mags": 0, "drones": 0, "heavy": 0, "crouch": false,
+		"in_match": false, "role": "", "confirmed": false, "eq": prof.eq.duplicate(), "free": {},
 		"flags": 0, "aim": false, "gren": 0, "armor_dur": 100.0, "helm_dur": 100.0, "last_gren": 0, "med": 0, "heal_t": 0.0,
 	}
 
@@ -217,7 +273,12 @@ func _new_pdata(nick: String, team: int, prof: Dictionary) -> Dictionary:
 func _equip(id: int) -> void:
 	var p: Dictionary = players[id]
 	var prof: Dictionary = p.prof
-	var eq: Dictionary = prof.eq
+	# спорядження на це життя: власне + набір ролі
+	var eq: Dictionary = prof.eq.duplicate()
+	var role: Dictionary = Gear.ROLES.get(String(p.role), Gear.ROLES["rifle"])
+	for k in role.kit:
+		eq[k] = role.kit[k]
+	p.eq = eq
 	var w: Dictionary = Gear.WEAPONS[eq.w]
 	var stock := int(prof.mags.get(eq.w, 0))
 	var take := mini(stock, Gear.mag_capacity(eq))
@@ -243,6 +304,14 @@ func _equip(id: int) -> void:
 	var gt := mini(int(prof.get("gren", 0)), Gear.grenade_slots(eq))
 	prof.gren = int(prof.get("gren", 0)) - gt
 	p.gren = gt
+	# безкоштовні речі ролі (не беруться зі складу і не повертаються на склад)
+	var fr: Dictionary = role.free
+	p.free = fr.duplicate()
+	p.mags = int(p.mags) + int(fr.get("mags", 0))
+	p.drones = int(p.drones) + int(fr.get("drones", 0))
+	p.heavy = int(p.heavy) + int(fr.get("heavy", 0))
+	p.gren = int(p.gren) + int(fr.get("gren", 0))
+	p.med = int(p.med) + int(fr.get("med", 0))
 	p.slot = 0
 	_save_profile(id)
 	_send_loadout(id)
@@ -255,7 +324,14 @@ func _return_carried(id: int) -> void:
 	if not p.alive:
 		return
 	var prof: Dictionary = p.prof
-	var eq: Dictionary = prof.eq
+	var eq: Dictionary = p.eq
+	var fr: Dictionary = p.get("free", {})
+	p.mags = maxi(0, int(p.mags) - int(fr.get("mags", 0)))
+	p.drones = maxi(0, int(p.drones) - int(fr.get("drones", 0)))
+	p.heavy = maxi(0, int(p.heavy) - int(fr.get("heavy", 0)))
+	p.gren = maxi(0, int(p.gren) - int(fr.get("gren", 0)))
+	p.med = maxi(0, int(p.med) - int(fr.get("med", 0)))
+	p.free = {}
 	var back := int(p.mags) + (1 if int(p.in_mag) > 0 else 0)
 	prof.mags[eq.w] = int(prof.mags.get(eq.w, 0)) + back
 	prof.fpv = int(prof.fpv) + int(p.drones)
@@ -273,7 +349,7 @@ func _return_carried(id: int) -> void:
 
 func _send_loadout(id: int) -> void:
 	var p: Dictionary = players[id]
-	rpc_id(id, "cl_loadout", p.prof, p.in_mag, p.mags, p.drones, p.heavy, p.gren, int(p.armor_dur), int(p.helm_dur), int(p.med))
+	rpc_id(id, "cl_loadout", p.prof, p.eq, p.in_mag, p.mags, p.drones, p.heavy, p.gren, int(p.armor_dur), int(p.helm_dur), int(p.med))
 
 
 func _server_spawn(id: int) -> void:
@@ -332,7 +408,7 @@ func _give_money(id: int, amount: int, reason: String) -> void:
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func srv_join(nick: String, ver: int, pref: int = 0) -> void:
+func srv_hello(nick: String, ver: int) -> void:
 	if not is_server:
 		return
 	var id := multiplayer.get_remote_sender_id()
@@ -348,22 +424,145 @@ func srv_join(nick: String, ver: int, pref: int = 0) -> void:
 		if String(players[pid].nick).to_lower() == nick.to_lower():
 			rpc_id(id, "cl_msg", "Позивний «%s» вже в грі. Оберіть інший." % nick)
 			return
-	# якщо на сервері нікого — карта обирається за бажанням гравця
-	pref = clampi(pref, 0, World.map_count() - 1)
-	if players.is_empty() and pref != map_index:
-		_switch_map(pref)
-	rpc_id(id, "cl_map", map_index)
-	var team := 0 if _team_count(0) <= _team_count(1) else 1
 	for pid in players:
 		var e: Dictionary = players[pid]
 		rpc_id(id, "cl_add_player", pid, e.nick, e.team, e.kills, e.deaths)
-		rpc_id(id, "cl_gear", pid, e.prof.eq, int(e.slot))
-	players[id] = _new_pdata(nick, team, _load_profile(nick))
+		if e.alive:
+			rpc_id(id, "cl_gear", pid, e.eq, int(e.slot))
+	players[id] = _new_pdata(nick, -1, _load_profile(nick))
+	rpc("cl_add_player", id, nick, -1, 0, 0)
+	rpc_id(id, "cl_map", map_index)
+	rpc_id(id, "cl_profile", players[id].prof)
+	print("[SERVER] %s connected (players: %d)" % [nick, players.size()])
+	_lobby_broadcast()
+
+
+## Гравець натиснув «ПОЧАТИ»: голос за карту; якщо ніхто не грає — карта змінюється.
+@rpc("any_peer", "call_remote", "reliable")
+func srv_enter(pref: int) -> void:
+	if not is_server:
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if not players.has(id):
+		return
+	pref = clampi(pref, 0, World.map_count() - 1)
 	players[id].map_pref = pref
-	rpc("cl_add_player", id, nick, team, 0, 0)
-	rpc_id(id, "cl_welcome", id, team, tickets[0], tickets[1], capture)
-	print("[SERVER] %s joined team %d (players: %d)" % [nick, team, players.size()])
-	_server_spawn(id)
+	var busy := false
+	for pid in players:
+		if pid != id and (players[pid].confirmed or players[pid].alive):
+			busy = true
+	if not busy and pref != map_index:
+		_switch_map(pref)
+	_lobby_broadcast()
+
+
+func _role_count(team: int, role: String, except_id: int = -1) -> int:
+	var n := 0
+	for pid in players:
+		var e: Dictionary = players[pid]
+		if pid != except_id and e.confirmed and int(e.team) == team and String(e.role) == role:
+			n += 1
+	return n
+
+
+func _team_size(team: int, except_id: int = -1) -> int:
+	var n := 0
+	for pid in players:
+		var e: Dictionary = players[pid]
+		if pid != except_id and e.confirmed and int(e.team) == team:
+			n += 1
+	return n
+
+
+## Вибір команди і ролі. Сервер перевіряє вільні місця, щоб двоє не зайняли одне.
+@rpc("any_peer", "call_remote", "reliable")
+func srv_pick(team: int, role: String) -> void:
+	if not is_server:
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if not players.has(id):
+		return
+	var p: Dictionary = players[id]
+	if team < 0 or team > 1 or not Gear.ROLES.has(role):
+		return
+	if p.alive and (int(p.team) != team or String(p.role) != role):
+		rpc_id(id, "cl_msg", "Роль можна змінити лише до початку бою або після загибелі.")
+		return
+	if _team_size(team, id) >= Gear.TEAM_SIZE:
+		rpc_id(id, "cl_pick_result", false, "Команда заповнена (%d з %d). Оберіть іншу." % [Gear.TEAM_SIZE, Gear.TEAM_SIZE])
+		return
+	if _role_count(team, role, id) >= int(Gear.ROLES[role].slots):
+		rpc_id(id, "cl_pick_result", false, "Усі місця «%s» зайняті. Оберіть іншу роль." % Gear.ROLES[role].name)
+		return
+	var team_changed := int(p.team) != team
+	p.team = team
+	p.role = role
+	p.confirmed = true
+	p.in_match = true
+	rpc("cl_player_team", id, team, role)
+	rpc_id(id, "cl_pick_result", true, "")
+	print("[SERVER] %s: команда %d, роль %s" % [p.nick, team, role])
+	if match_state == "running" and not p.alive:
+		rpc_id(id, "cl_match_start", tickets[0], tickets[1], capture)
+		p.respawn = 0.5
+	elif match_state == "waiting" and match_count <= 0.0:
+		match_count = cfg_countdown
+	if team_changed and p.alive:
+		_server_spawn(id)
+	_lobby_broadcast()
+
+
+## Вихід з бою в головне меню (з'єднання лишається).
+@rpc("any_peer", "call_remote", "reliable")
+func srv_leave_match() -> void:
+	if not is_server:
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if not players.has(id):
+		return
+	var p: Dictionary = players[id]
+	if p.mode == 1:
+		_end_drone(id, false)
+	_return_carried(id)
+	p.alive = false
+	p.in_match = false
+	p.confirmed = false
+	p.respawn = 0.0
+	_save_profile(id)
+	rpc("cl_player_left_match", id)
+	_lobby_broadcast()
+
+
+func _lobby_data() -> Dictionary:
+	var teams := [[], []]
+	for pid in players:
+		var e: Dictionary = players[pid]
+		if e.confirmed and int(e.team) >= 0:
+			teams[int(e.team)].append([String(e.nick), String(e.role)])
+	return {"state": match_state, "count": match_count, "map": map_index, "teams": teams, "t": tickets}
+
+
+func _lobby_broadcast() -> void:
+	rpc("cl_lobby", _lobby_data())
+
+
+func _start_match() -> void:
+	match_state = "running"
+	round_over = false
+	tickets = [START_TICKETS, START_TICKETS]
+	capture = 0.0
+	server_projectiles.clear()
+	mortar_impacts.clear()
+	print("[SERVER] match started on %s" % World.cur.name)
+	for pid in players:
+		var p: Dictionary = players[pid]
+		p.kills = 0
+		p.deaths = 0
+		if p.confirmed:
+			rpc_id(pid, "cl_match_start", tickets[0], tickets[1], capture)
+			_server_spawn(pid)
+	rpc("cl_status", tickets[0], tickets[1], capture)
+	_lobby_broadcast()
 
 
 @rpc("any_peer", "call_remote", "unreliable_ordered")
@@ -397,10 +596,10 @@ func srv_slot(slot: int) -> void:
 	if not players.has(id):
 		return
 	var p: Dictionary = players[id]
-	if slot < 0 or slot > 2 or (slot == 1 and p.prof.eq.x == "none"):
+	if slot < 0 or slot > 2 or (slot == 1 and p.eq.x == "none"):
 		slot = 0
 	p.slot = slot
-	rpc("cl_gear", id, p.prof.eq, slot)
+	rpc("cl_gear", id, p.eq, slot)
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -413,7 +612,7 @@ func srv_fire(origin: Vector3, dir: Vector3) -> void:
 	var p: Dictionary = players[id]
 	if int(p.slot) != 0 or int(p.in_mag) <= 0:
 		return
-	var w: Dictionary = Gear.WEAPONS[p.prof.eq.w]
+	var w: Dictionary = Gear.WEAPONS[p.eq.w]
 	var now := Time.get_ticks_msec()
 	if now - int(p.last_fire) < int(float(w.rof) * 800.0):
 		return
@@ -433,7 +632,7 @@ func srv_reload() -> void:
 	if int(p.mags) <= 0:
 		return
 	p.mags = int(p.mags) - 1
-	p.in_mag = int(Gear.WEAPONS[p.prof.eq.w].mag)
+	p.in_mag = int(Gear.WEAPONS[p.eq.w].mag)
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -444,7 +643,7 @@ func srv_rpg(origin: Vector3, dir: Vector3) -> void:
 	if not players.has(id):
 		return
 	var p: Dictionary = players[id]
-	if not p.alive or p.prof.eq.x != "rpg" or int(p.slot) != 1 or int(p.heavy) <= 0:
+	if not p.alive or p.eq.x != "rpg" or int(p.slot) != 1 or int(p.heavy) <= 0:
 		return
 	var now := Time.get_ticks_msec()
 	if now - int(p.last_heavy) < 2000:
@@ -469,7 +668,7 @@ func srv_mortar(target: Vector3) -> void:
 		return
 	var p: Dictionary = players[id]
 	var h: Dictionary = Gear.HEAVY["mortar"]
-	if not p.alive or p.prof.eq.x != "mortar" or int(p.slot) != 1 or int(p.heavy) <= 0:
+	if not p.alive or p.eq.x != "mortar" or int(p.slot) != 1 or int(p.heavy) <= 0:
 		return
 	var dist := Vector2(target.x - p.pos.x, target.z - p.pos.z).length()
 	if dist < float(h.min_range) or dist > float(h.max_range):
@@ -684,10 +883,36 @@ func _physics_process(delta: float) -> void:
 			p.drone_t -= delta
 			if p.drone_t <= 0.0:
 				_end_drone(pid, true)
-		if not p.alive and not round_over:
+		if not p.alive and not round_over and match_state == "running" and p.confirmed:
 			p.respawn -= delta
 			if p.respawn <= 0.0:
 				_server_spawn(pid)
+
+	# лобі: відлік до старту бою
+	if match_state == "waiting":
+		var any := false
+		for pid in players:
+			if players[pid].confirmed:
+				any = true
+		if not any:
+			match_count = 0.0
+		elif match_count > 0.0:
+			match_count -= delta
+			lobby_t -= delta
+			if lobby_t <= 0.0:
+				lobby_t = 1.0
+				_lobby_broadcast()
+			if match_count <= 0.0:
+				_start_match()
+	elif match_state == "running":
+		var anyone := false
+		for pid in players:
+			if players[pid].in_match:
+				anyone = true
+		if not anyone:
+			match_state = "waiting"
+			match_count = 0.0
+			_lobby_broadcast()
 
 	snap_t -= delta
 	if snap_t <= 0.0:
@@ -697,7 +922,8 @@ func _physics_process(delta: float) -> void:
 	tick_acc += delta
 	if tick_acc >= 1.0:
 		tick_acc -= 1.0
-		_capture_tick()
+		if match_state == "running":
+			_capture_tick()
 
 	save_t -= delta
 	if save_t <= 0.0:
@@ -766,7 +992,7 @@ func _process_shot(id: int, origin: Vector3, dir: Vector3) -> void:
 				target = pid
 				target_drone = true
 	var end := origin + dir * best_d
-	rpc("cl_tracer", id, origin, end, p.prof.eq.w)
+	rpc("cl_tracer", id, origin, end, p.eq.w)
 	if target == -1:
 		return
 	if target_drone:
@@ -781,13 +1007,13 @@ func _process_shot(id: int, origin: Vector3, dir: Vector3) -> void:
 	var h_eff := 0.35 + 0.65 * float(e.helm_dur) / 100.0
 	match part_hit:
 		0:
-			dmg *= 2.2 * (1.0 - float(Gear.HELMET[e.prof.eq.h].reduce) * h_eff)
-			if e.prof.eq.h != "none":
+			dmg *= 2.2 * (1.0 - float(Gear.HELMET[e.eq.h].reduce) * h_eff)
+			if e.eq.h != "none":
 				e.helm_dur = maxf(0.0, float(e.helm_dur) - raw * 0.8)
 		1, 2:
 			var k := 1.0 if part_hit == 1 else 0.7
-			dmg *= 1.0 - float(Gear.ARMOR[e.prof.eq.a].reduce) * a_eff * k
-			if e.prof.eq.a != "none":
+			dmg *= 1.0 - float(Gear.ARMOR[e.eq.a].reduce) * a_eff * k
+			if e.eq.a != "none":
 				e.armor_dur = maxf(0.0, float(e.armor_dur) - raw * 0.6 * k)
 		3, 4:
 			dmg *= 0.7
@@ -900,9 +1126,9 @@ func _explode(pos: Vector3, kid: int, team: int, radius: float, maxdmg: float, r
 			q.collision_mask = 1
 			if not world.get_world_3d().direct_space_state.intersect_ray(q).is_empty():
 				cover = 0.3
-			var armor := 1.0 - float(Gear.ARMOR[e.prof.eq.a].reduce) * 0.5 * (0.35 + 0.65 * float(e.armor_dur) / 100.0)
+			var armor := 1.0 - float(Gear.ARMOR[e.eq.a].reduce) * 0.5 * (0.35 + 0.65 * float(e.armor_dur) / 100.0)
 			var dmg := int(maxdmg * (1.0 - d / radius) * cover * armor) + 5
-			if e.prof.eq.a != "none":
+			if e.eq.a != "none":
 				e.armor_dur = maxf(0.0, float(e.armor_dur) - dmg * 0.4)
 			var was_alive: bool = e.alive
 			_damage(pid, kid, dmg, false, 7, pos)
@@ -1031,6 +1257,7 @@ func _check_round_end() -> void:
 	for t in 2:
 		if tickets[t] <= 0:
 			round_over = true
+			match_state = "ended"
 			round_reset_t = 12.0
 			var winner := 1 - t
 			print("[SERVER] round over, winner team %d" % winner)
@@ -1071,25 +1298,29 @@ func _vote_map() -> int:
 	return int(top[randi() % top.size()])
 
 
+## Кінець раунду: усі повертаються в лобі і обирають команду й роль заново.
 func _round_restart() -> void:
 	var next := _vote_map()
 	if next != map_index:
 		_switch_map(next)
 	round_over = false
+	match_state = "waiting"
+	match_count = 0.0
 	tickets = [START_TICKETS, START_TICKETS]
 	capture = 0.0
 	server_projectiles.clear()
 	mortar_impacts.clear()
 	for pid in players:
 		var p: Dictionary = players[pid]
-		p.kills = 0
-		p.deaths = 0
 		if p.mode == 1:
 			_end_drone(pid, false)
 		_return_carried(pid)
-		_server_spawn(pid)
-	rpc("cl_round_start")
+		p.alive = false
+		p.confirmed = false
+		_save_profile(pid)
+	rpc("cl_round_lobby")
 	rpc("cl_status", tickets[0], tickets[1], capture)
+	_lobby_broadcast()
 
 
 # =====================================================================
@@ -1113,8 +1344,11 @@ func connect_to(host: String, port: int, nick: String) -> void:
 
 func _on_connected() -> void:
 	connected = true
-	_set_status("Підключено. Заходимо в бій...")
-	rpc_id(1, "srv_join", str(get_meta("nick", "Боєць")), VERSION, map_pref)
+	my_id = multiplayer.get_unique_id()
+	_set_status("Сервер: підключено")
+	rpc_id(1, "srv_hello", str(get_meta("nick", "Боєць")), VERSION)
+	if auto_pick:
+		rpc_id(1, "srv_enter", map_pref)
 	if is_bot:
 		print("[BOT] connected as %d" % multiplayer.get_unique_id())
 
@@ -1122,7 +1356,8 @@ func _on_connected() -> void:
 func _on_conn_failed() -> void:
 	connected = false
 	multiplayer.multiplayer_peer = null
-	_set_status("Сервер не відповідає. Перевірте адресу і чи запущено сервер.")
+	_set_status("Сервер не відповідає. Повторна спроба за 5 с...")
+	retry_t = 5.0
 	if is_bot:
 		print("[BOT] connection failed")
 
@@ -1135,13 +1370,16 @@ func _on_server_gone() -> void:
 		print("[BOT] server disconnected")
 		get_tree().quit()
 		return
+	in_match = false
 	if menu:
-		menu.show()
+		_close_overlays()
 		hud.hide()
 		touch.hide()
-		shop.hide()
+		menu.picked = false
+		menu.show_menu("home")
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	_set_status("З'єднання з сервером втрачено.")
+	_set_status("З'єднання з сервером втрачено. Повторна спроба за 5 с...")
+	retry_t = 5.0
 
 
 func _clear_match() -> void:
@@ -1289,20 +1527,130 @@ func _rebuild_client_world() -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
-func cl_welcome(id: int, team: int, t0: int, t1: int, cap: float) -> void:
-	my_id = id
-	my_team = team
+func cl_profile(prof: Dictionary) -> void:
+	profile = prof
+	if menu:
+		menu.refresh_rp()
+		menu.refresh_hero_gear()
+		menu.refresh()
+
+
+@rpc("authority", "call_remote", "reliable")
+func cl_lobby(data: Dictionary) -> void:
+	lobby = data
+	if menu:
+		menu.on_lobby(data)
+	if auto_pick and my_role == "" and not get_meta("pick_sent", false):
+		_auto_pick(data)
+
+
+## Бот / автотест: обирає команду з меншою кількістю гравців і вільну роль.
+func _auto_pick(data: Dictionary) -> void:
+	var teams: Array = data.get("teams", [[], []])
+	var t := 0 if teams[0].size() <= teams[1].size() else 1
+	var roles: Array = ["rifle", "fpv", "medic", "mg", "mortar", "eng", "radio", "cmd"]
+	if is_bot:
+		roles.shuffle()
+	for r in roles:
+		var used := 0
+		for e in teams[t]:
+			if String(e[1]) == r:
+				used += 1
+		if used < int(Gear.ROLES[r].slots):
+			set_meta("pick_sent", true)
+			rpc_id(1, "srv_pick", t, r)
+			if is_bot:
+				print("[BOT] pick team %d role %s" % [t, r])
+			return
+
+
+@rpc("authority", "call_remote", "reliable")
+func cl_pick_result(ok: bool, msg: String) -> void:
+	if not ok:
+		set_meta("pick_sent", false)
+		my_role = ""
+	if menu:
+		menu.on_pick_result(ok, msg)
+	if is_bot:
+		print("[BOT] pick %s %s" % [str(ok), msg])
+
+
+@rpc("authority", "call_remote", "reliable")
+func cl_player_team(id: int, team: int, role: String) -> void:
+	if not players.has(id):
+		return
+	var old := int(players[id].team)
+	players[id].team = team
+	players[id]["role"] = role
+	if id == my_id:
+		my_team = team
+		my_role = role
+		if menu:
+			menu.sel_team = team
+			menu.sel_role = role
+		if old != team and soldier:
+			soldier.queue_free()
+			soldier = null
+			alive_local = false
+	elif old != team or not avatars.has(id):
+		if avatars.has(id):
+			avatars[id].queue_free()
+		var a = Avatar.new()
+		a.setup(String(players[id].nick), TEAM_COLORS[team], team)
+		a.visible = false
+		world.add_child(a)
+		avatars[id] = a
+
+
+@rpc("authority", "call_remote", "reliable")
+func cl_match_start(t0: int, t1: int, cap: float) -> void:
 	tickets = [t0, t1]
 	capture = cap
+	in_match = true
+	if tophud:
+		tophud.round_t = 0.0
 	if menu:
-		menu.hide()
+		_close_overlays()
+		menu.hide_menu()
 		hud.show()
 		touch.show()
+		touch.reset_input()
 		if not OS.has_feature("mobile"):
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	_show_center("Ваша команда: %s. Спорядження — кнопка МАГАЗИН" % TEAM_NAMES[team], 4.0)
+		_show_center("В бій! Команда: %s, роль: %s" % [TEAM_NAMES[my_team], String(Gear.ROLES.get(my_role, {}).get("name", ""))], 3.5)
 	if is_bot:
-		print("[BOT] welcome, team %d" % team)
+		print("[BOT] match start, team %d" % my_team)
+
+
+@rpc("authority", "call_remote", "reliable")
+func cl_round_lobby() -> void:
+	in_match = false
+	my_role = ""
+	set_meta("pick_sent", false)
+	alive_local = false
+	if soldier:
+		soldier.queue_free()
+		soldier = null
+	for id in avatars:
+		avatars[id].visible = false
+	for id in remote_drones.keys():
+		_remove_remote_drone(id)
+	if menu:
+		_close_overlays()
+		hud.hide()
+		touch.hide()
+		touch.reset_input()
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		menu.new_round()
+	if is_bot:
+		print("[BOT] back to lobby")
+
+
+@rpc("authority", "call_remote", "reliable")
+func cl_player_left_match(id: int) -> void:
+	if avatars.has(id):
+		avatars[id].visible = false
+	_remove_remote_drone(id)
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -1310,7 +1658,7 @@ func cl_add_player(id: int, nick: String, team: int, kills: int, deaths: int) ->
 	players[id] = {"nick": nick, "team": team, "kills": kills, "deaths": deaths}
 	if id != multiplayer.get_unique_id() and not avatars.has(id):
 		var a = Avatar.new()
-		a.setup(nick, TEAM_COLORS[team])
+		a.setup(nick, TEAM_COLORS[maxi(team, 0)], maxi(team, 0))
 		a.visible = false
 		world.add_child(a)
 		avatars[id] = a
@@ -1332,16 +1680,20 @@ func cl_gear(id: int, eq: Dictionary, slot: int) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
-func cl_loadout(prof: Dictionary, in_mag: int, mags: int, drones: int, heavy: int, gren: int, adur: int, hdur: int, med: int) -> void:
+func cl_loadout(prof: Dictionary, eq: Dictionary, in_mag: int, mags: int, drones: int, heavy: int, gren: int, adur: int, hdur: int, med: int) -> void:
 	profile = prof
 	armor_dur = adur
 	helm_dur = hdur
 	if soldier:
-		soldier.apply_loadout(prof.eq, in_mag, mags, drones, heavy, gren, med)
+		soldier.apply_loadout(eq, in_mag, mags, drones, heavy, gren, med)
 	if shop and shop.visible:
 		_refresh_shop()
+	if menu and menu.visible:
+		menu.refresh_rp()
+		menu.refresh_hero_gear()
+		menu.refresh()
 	if is_bot:
-		print("[BOT] loadout: %s, mags %d, drones %d, money %d" % [str(prof.eq), mags, drones, int(prof.money)])
+		print("[BOT] loadout: %s, mags %d, drones %d, money %d" % [str(eq), mags, drones, int(prof.money)])
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -1793,21 +2145,32 @@ func _process(delta: float) -> void:
 		elif capture >= 100.0:
 			c = Color(TEAM_COLORS[1].r, TEAM_COLORS[1].g, TEAM_COLORS[1].b, 0.35)
 		cap_ring_mat.albedo_color = c
+	_fill_music()
+	if retry_t > 0.0 and not connected and not is_bot:
+		retry_t -= delta
+		if retry_t <= 0.0:
+			menu_connect(true)
 	if touch and touch.shop_pressed:
 		touch.shop_pressed = false
 		_open_shop()
 	if touch and touch.bag_pressed:
 		touch.bag_pressed = false
 		if bag:
-			bag.open()
-			touch.hide()
-			touch.reset_input()
+			open_bag()
 	if touch and touch.map_pressed:
 		touch.map_pressed = false
 		if bigmap:
-			bigmap.show()
-			touch.hide()
-			touch.reset_input()
+			open_bigmap()
+	if touch and touch.settings_pressed:
+		touch.settings_pressed = false
+		if settings_panel:
+			open_settings(true)
+	if minimap and hud and hud.visible:
+		var mr: Rect2 = touch.minimap_rect()
+		minimap.position = mr.position
+		minimap.size = mr.size
+		minimap.modulate.a = touch.el_alpha("minimap")
+		minimap.visible = not touch.el_hidden("minimap")
 	if hud == null or not hud.visible:
 		return
 	_update_hud(delta)
@@ -1930,7 +2293,8 @@ func _build_ui() -> void:
 	hp_lbl.visible = false
 	money_lbl = _label(hud, 18, HORIZONTAL_ALIGNMENT_LEFT)
 	money_lbl.add_theme_color_override("font_color", Color(0.5, 1.0, 0.55))
-	_place(money_lbl, Vector4(0, 0, 0, 0), Vector4(160, 80, 400, 104))
+	_place(money_lbl, Vector4(0, 0, 0, 0), Vector4(240, 80, 480, 104))
+	money_lbl.visible = not Gear.UNLIMITED_MONEY
 	feed_lbl = _label(hud, 16, HORIZONTAL_ALIGNMENT_RIGHT)
 	_place(feed_lbl, Vector4(1, 0, 1, 0), Vector4(-430, 240, -20, 380))
 	ammo_lbl = _label(hud, 18, HORIZONTAL_ALIGNMENT_CENTER)
@@ -1966,130 +2330,232 @@ func _build_ui() -> void:
 
 	_build_shop()
 
-	# ---------------- меню
-	menu = ColorRect.new()
-	menu.color = Color(0.05, 0.06, 0.08, 0.94)
-	menu.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# ---------------- головне меню, налаштування, редактор HUD
+	menu = Menu.new()
 	ui.add_child(menu)
-
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 12)
-	menu.add_child(box)
-	_place(box, Vector4(0.5, 0.5, 0.5, 0.5), Vector4(-470, -345, 470, 345))
-
-	var title := Label.new()
-	title.text = "UA WAR FRONT"
-	title.add_theme_font_size_override("font_size", 64)
-	title.add_theme_color_override("font_color", Color(1.0, 0.8, 0.15))
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(title)
-
-	var sub := Label.new()
-	sub.text = "Бій 20 на 20 • окопи • FPV-дрони • РПГ і міномети"
-	sub.add_theme_font_size_override("font_size", 21)
-	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(sub)
-
-	var cfg := ConfigFile.new()
-	cfg.load("user://settings.cfg")
-
-	nick_edit = LineEdit.new()
-	nick_edit.placeholder_text = "Позивний"
-	nick_edit.max_length = 16
-	nick_edit.text = str(cfg.get_value("main", "nick", ""))
-	nick_edit.add_theme_font_size_override("font_size", 28)
-	nick_edit.custom_minimum_size = Vector2(0, 60)
-	box.add_child(nick_edit)
-
-	addr_edit = LineEdit.new()
-	addr_edit.placeholder_text = "Адреса сервера"
-	var saved_addr := str(cfg.get_value("main", "addr", DEFAULT_ADDR))
-	if saved_addr == "" or saved_addr.begins_with("127.0.0.1"):
-		saved_addr = DEFAULT_ADDR
-	addr_edit.text = saved_addr
-	addr_edit.add_theme_font_size_override("font_size", 24)
-	addr_edit.custom_minimum_size = Vector2(0, 56)
-	box.add_child(addr_edit)
-
-	# вибір карти
-	var ml := Label.new()
-	ml.text = "Карта (якщо на сервері вже йде бій — голос за наступну карту)"
-	ml.add_theme_font_size_override("font_size", 18)
-	ml.add_theme_color_override("font_color", Color(0.8, 0.82, 0.86))
-	box.add_child(ml)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_child(row)
-	map_pref = clampi(int(cfg.get_value("main", "map", 0)), 0, World.map_count() - 1)
-	map_btns.clear()
-	for mi in World.map_count():
-		var md: Dictionary = World.MAPS[mi]
-		var b := Button.new()
-		b.toggle_mode = true
-		b.text = String(md.name)
-		b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-		b.expand_icon = true
-		b.custom_minimum_size = Vector2(176, 170)
-		b.add_theme_font_size_override("font_size", 17)
-		var ip := "res://maps/%s_top.png" % String(md.get("file", "field"))
-		if ResourceLoader.exists(ip):
-			b.icon = load(ip)
-		b.button_pressed = mi == map_pref
-		b.pressed.connect(_select_map.bind(mi))
-		row.add_child(b)
-		map_btns.append(b)
-
-	var play := Button.new()
-	play.text = "В БІЙ"
-	play.add_theme_font_size_override("font_size", 36)
-	play.custom_minimum_size = Vector2(0, 80)
-	play.pressed.connect(_on_play_pressed)
-	box.add_child(play)
-
-	status_lbl = Label.new()
-	status_lbl.add_theme_font_size_override("font_size", 20)
-	status_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
-	box.add_child(status_lbl)
-
-	var help := Label.new()
-	help.text = "Ліва частина екрана — рух, права — огляд. ЗБРОЯ — автомат / РПГ або міномет / сховати.\nГроші — за ліквідації, збиті дрони, утримання точки і перемогу. Витрачайте їх у МАГАЗИНІ.\nВсе, що береш у бій, важить: що важче спорядження, то повільніше рухаєшся."
-	help.add_theme_font_size_override("font_size", 14)
-	help.add_theme_color_override("font_color", Color(0.7, 0.72, 0.76))
-	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	help.autowrap_mode = TextServer.AUTOWRAP_WORD
-	box.add_child(help)
+	menu.setup(self)
+	status_lbl = menu.status_lbl
+	ui.move_child(shop, -1)
+	settings_panel = SettingsPanel.new()
+	ui.add_child(settings_panel)
+	settings_panel.setup(self)
+	hud_editor = HudEdit.new()
+	ui.add_child(hud_editor)
+	hud_editor.setup(self, touch)
+	touch.load_layout(int(Settings.value("controls", "hud_profile", 1)))
+	touch.auto_sprint = int(Settings.value("controls", "auto_sprint", 1)) == 1
+	minimap.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	map_pref = clampi(int(Settings.value("main", "map", 0)), 0, World.map_count() - 1)
 
 
-func _select_map(idx: int) -> void:
-	map_pref = idx
-	for i in map_btns.size():
-		map_btns[i].button_pressed = i == idx
+# ---------------------------------------------------------------- меню і панелі
 
-
-func _on_play_pressed() -> void:
-	var nick := nick_edit.text.strip_edges()
-	if nick == "":
-		_set_status("Введіть позивний.")
+## Підключення до сервера з меню (адреса — з налаштувань).
+func menu_connect(force: bool = false) -> void:
+	if connected and not force:
 		return
-	var addr := addr_edit.text.strip_edges()
+	var nick := String(Settings.value("main", "nick", "")).strip_edges()
+	if nick == "":
+		return
+	var addr := String(Settings.value("main", "addr", DEFAULT_ADDR)).strip_edges()
+	if addr == "" or addr == "127.0.0.1:7000":
+		addr = DEFAULT_ADDR
 	var host := addr
 	var port := DEFAULT_PORT
 	var colon := addr.rfind(":")
 	if colon > 0:
 		host = addr.substr(0, colon)
 		port = int(addr.substr(colon + 1))
-	if host == "" or port <= 0:
-		_set_status("Неправильна адреса. Приклад: 147.185.221.217:11983")
-		return
-	var cfg := ConfigFile.new()
-	cfg.set_value("main", "nick", nick)
-	cfg.set_value("main", "addr", addr)
-	cfg.set_value("main", "map", map_pref)
-	cfg.save("user://settings.cfg")
+	if connected:
+		multiplayer.multiplayer_peer.close()
+		connected = false
+		_clear_match()
+	retry_t = 0.0
 	connect_to(host, port, nick)
+
+
+func request_enter(map_idx: int) -> void:
+	map_pref = map_idx
+	if connected:
+		rpc_id(1, "srv_enter", map_idx)
+
+
+func request_pick(team: int, role: String) -> void:
+	if connected:
+		rpc_id(1, "srv_pick", team, role)
+	else:
+		menu.on_pick_result(false, "Немає з'єднання з сервером.")
+
+
+## Вихід з лобі до головного меню.
+func leave_lobby() -> void:
+	my_role = ""
+	if connected:
+		rpc_id(1, "srv_leave_match")
+
+
+## Вихід з бою в головне меню (з налаштувань під час бою).
+func leave_match() -> void:
+	in_match = false
+	my_role = ""
+	if connected:
+		rpc_id(1, "srv_leave_match")
+	if soldier:
+		soldier.queue_free()
+		soldier = null
+	alive_local = false
+	_close_overlays()
+	hud.hide()
+	touch.hide()
+	touch.reset_input()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	menu.picked = false
+	menu.show_menu("home")
+
+
+func open_settings(game: bool) -> void:
+	if settings_panel.visible:
+		return
+	touch.reset_input()
+	if game:
+		touch.hide()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	settings_panel.open(game)
+
+
+func on_settings_closed() -> void:
+	touch.auto_sprint = int(Settings.value("controls", "auto_sprint", 1)) == 1
+	touch.load_layout(int(Settings.value("controls", "hud_profile", 1)))
+	if hud.visible:
+		touch.show()
+
+
+var _touch_idx := -1
+var _menu_was_visible := false
+
+
+func open_hud_editor() -> void:
+	_touch_idx = touch.get_index()
+	ui.move_child(touch, -1)
+	ui.move_child(hud_editor, -1)
+	_menu_was_visible = menu.visible
+	if menu.visible:
+		menu.visible = false
+		menu.set_active(false)
+	hud_editor.open()
+
+
+func on_hud_editor_closed() -> void:
+	if _touch_idx >= 0:
+		ui.move_child(touch, _touch_idx)
+	if _menu_was_visible:
+		menu.visible = true
+		menu.set_active(true)
+	if not hud.visible:
+		touch.hide()
+	settings_panel.open(hud.visible)
+
+
+func open_shop_from_menu() -> void:
+	_open_shop()
+
+
+## Закриває всі накладки (карта, рюкзак, магазин, налаштування).
+func _close_overlays() -> void:
+	if bigmap and bigmap.visible:
+		bigmap.hide()
+	if bag and bag.visible:
+		bag.hide()
+	if shop and shop.visible:
+		shop.hide()
+	if settings_panel and settings_panel.visible:
+		settings_panel.hide()
+	if hud_editor and hud_editor.visible:
+		hud_editor.back()
+
+
+## Системна кнопка «Назад» на Android: закриває верхню панель, а не гру.
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_WM_GO_BACK_REQUEST or is_server or menu == null:
+		return
+	if hud_editor.visible:
+		hud_editor.back()
+	elif settings_panel.visible:
+		settings_panel.close_panel()
+	elif shop.visible:
+		_close_shop()
+	elif bag.visible:
+		bag.close()
+	elif bigmap.visible:
+		close_bigmap()
+	elif menu.visible:
+		menu.back()
+
+
+func open_bigmap() -> void:
+	if bigmap.visible or bag.visible:
+		return
+	touch.hide()
+	touch.reset_input()
+	UI.fade_in(bigmap)
+
+
+func close_bigmap() -> void:
+	if not bigmap.visible:
+		return
+	UI.fade_out(bigmap)
+	on_map_closed()
+
+
+func open_bag() -> void:
+	if bag.visible or bigmap.visible:
+		return
+	touch.hide()
+	touch.reset_input()
+	bag.open()
+
+
+## Фонова музика меню (синтезована, шина Music).
+func _start_music() -> void:
+	var gen := AudioStreamGenerator.new()
+	gen.mix_rate = 22050.0
+	gen.buffer_length = 0.5
+	music = AudioStreamPlayer.new()
+	music.stream = gen
+	music.volume_db = -14.0
+	if AudioServer.get_bus_index("Music") >= 0:
+		music.bus = "Music"
+	add_child(music)
+	music.play()
+	set_meta("mus_t", 0.0)
+
+
+const _MUS_NOTES := [55.0, 55.0, 65.41, 55.0, 49.0, 49.0, 58.27, 49.0]
+
+
+func _fill_music() -> void:
+	if music == null or not music.playing:
+		return
+	var pb := music.get_stream_playback() as AudioStreamGeneratorPlayback
+	if pb == null:
+		return
+	var n := pb.get_frames_available()
+	if n <= 0:
+		return
+	var t: float = get_meta("mus_t", 0.0)
+	var on: bool = menu != null and menu.visible
+	var dt := 1.0 / 22050.0
+	for k in n:
+		var beat := int(t / 2.0) % _MUS_NOTES.size()
+		var f: float = _MUS_NOTES[beat]
+		var ph := fmod(t, 2.0)
+		var env := minf(1.0, ph * 4.0) * (1.0 - ph * 0.35)
+		var v := sin(TAU * f * t) * 0.5 + sin(TAU * f * 2.0 * t) * 0.18 + sin(TAU * f * 3.01 * t) * 0.07
+		v += sin(TAU * f * 1.5 * t + sin(t * 0.5) * 2.0) * 0.12
+		v *= env * (0.32 if on else 0.0)
+		pb.push_frame(Vector2(v, v))
+		t += dt
+	set_meta("mus_t", fmod(t, 16.0))
 
 
 # ---------------------------------------------------------------- магазин

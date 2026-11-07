@@ -4,6 +4,7 @@ extends Control
 ## Свою базу завжди видно внизу карти.
 
 const World = preload("res://world.gd")
+const Icons = preload("res://icons.gd")
 
 var main
 var full := false
@@ -36,8 +37,9 @@ func setup(m, is_full: bool) -> void:
 
 func _gui_input(event: InputEvent) -> void:
 	if full and ((event is InputEventMouseButton and event.pressed) or (event is InputEventScreenTouch and event.pressed)):
-		hide()
-		main.on_map_closed()
+		var p: Vector2 = event.position
+		if p.distance_to(Vector2(size.x - 50.0, 50.0)) < 55.0:
+			main.close_bigmap()
 		accept_event()
 
 
@@ -61,6 +63,8 @@ func _draw() -> void:
 	var r := _map_rect()
 	if full:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.7))
+		draw_circle(Vector2(size.x - 50.0, 50.0), 30.0, Color(0, 0, 0, 0.6))
+		Icons.draw(self, "close", Vector2(size.x - 50.0, 50.0), 40.0, Color(1, 1, 1, 0.9))
 	draw_rect(r, Color(0.22, 0.27, 0.16, 0.88))
 	draw_rect(r, Color(1, 1, 1, 0.5), false, 2.0)
 	var lw := 3.0 if full else 1.6

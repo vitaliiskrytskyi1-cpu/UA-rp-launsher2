@@ -7,6 +7,16 @@ extends Node3D
 const Gear = preload("res://gear.gd")
 ## Моделі завантажуються лише на клієнті (сервер їх не використовує).
 static var _soldier_scene: PackedScene
+static var _soldier2_scene: PackedScene
+## Друга модель (Character Creator): відповідність кісток назвам Mixamo.
+const CC_MAP := {
+	"Hips": "CC_Base_Hip", "Spine": "CC_Base_Waist", "Spine1": "CC_Base_Spine01", "Spine2": "CC_Base_Spine02",
+	"Neck": "CC_Base_NeckTwist01", "Head": "CC_Base_Head",
+	"LeftShoulder": "CC_Base_L_Clavicle", "LeftArm": "CC_Base_L_Upperarm", "LeftForeArm": "CC_Base_L_Forearm", "LeftHand": "CC_Base_L_Hand",
+	"RightShoulder": "CC_Base_R_Clavicle", "RightArm": "CC_Base_R_Upperarm", "RightForeArm": "CC_Base_R_Forearm", "RightHand": "CC_Base_R_Hand",
+	"LeftUpLeg": "CC_Base_L_Thigh", "LeftLeg": "CC_Base_L_Calf", "LeftFoot": "CC_Base_L_Foot",
+	"RightUpLeg": "CC_Base_R_Thigh", "RightLeg": "CC_Base_R_Calf", "RightFoot": "CC_Base_R_Foot",
+}
 static var _ak_scene: PackedScene
 static var _wscenes := {}
 ## Моделі зброї з текстурами: файл, точка лівої руки (нуль — руків'я).
@@ -34,6 +44,8 @@ var team_color := Color.WHITE
 var rig: Node3D
 var skel: Skeleton3D
 var hats: Node3D
+var model_id := 0
+var _hips_parent_inv := Transform3D.IDENTITY
 var weapon_root: Node3D
 var gear_root: Node3D    # рухається разом з грудьми
 var hips_gear: Node3D    # рухається разом з тазом
@@ -143,12 +155,15 @@ func _node(parent: Node3D, pos: Vector3 = Vector3.ZERO) -> Node3D:
 
 # ---------------------------------------------------------------- побудова
 
-func setup(color: Color) -> void:
+func setup(color: Color, model: int = 0) -> void:
 	team_color = color
+	model_id = model
 	if _soldier_scene == null:
 		_soldier_scene = load("res://models/soldier.glb")
 		_ak_scene = load("res://models/ak.glb")
-	rig = _soldier_scene.instantiate()
+	if model_id == 1 and _soldier2_scene == null:
+		_soldier2_scene = load("res://models/soldier2.glb")
+	rig = (_soldier2_scene if model_id == 1 and _soldier2_scene else _soldier_scene).instantiate()
 	rig.rotation.y = PI   # модель дивиться в +Z, розвертаємо вперед
 	add_child(rig)
 	var found := rig.find_children("*", "Skeleton3D", true, false)
@@ -204,6 +219,20 @@ func _read_rest() -> void:
 		RP[i] = t * g.origin
 		RG[i] = mq * Quaternion(g.basis.orthonormalized())
 		PAR[i] = skel.get_bone_parent(i)
+	# друга модель: ті самі ролі кісток під іншими назвами
+	for k in CC_MAP:
+		if not B.has(k) and B.has(CC_MAP[k]):
+			B[k] = B[CC_MAP[k]]
+	if B.has("CC_Base_L_Index1"):
+		for f in [["Index", "Index"], ["Middle", "Mid"], ["Ring", "Ring"], ["Pinky", "Pinky"]]:
+			for sgi in [1, 2, 3]:
+				B["LeftHand%s%d" % [f[0], sgi]] = B.get("CC_Base_L_%s%d" % [f[1], sgi], -1)
+				B["RightHand%s%d" % [f[0], sgi]] = B.get("CC_Base_R_%s%d" % [f[1], sgi], -1)
+	# якщо в таза є батьківська кістка, позицію треба задавати в її системі
+	if B.has("Hips"):
+		var hp := skel.get_bone_parent(B.Hips)
+		if hp >= 0:
+			_hips_parent_inv = skel.get_bone_global_rest(hp).affine_inverse()
 	if B.has("LeftArm") and B.has("LeftForeArm") and B.has("LeftHand"):
 		_len_up = (RP[B.LeftForeArm] - RP[B.LeftArm]).length()
 		_len_lo = (RP[B.LeftHand] - RP[B.LeftForeArm]).length()
@@ -211,9 +240,9 @@ func _read_rest() -> void:
 		for s in [1, 2, 3]:
 			var ln := "LeftHand%s%d" % [f, s]
 			var rn := "RightHand%s%d" % [f, s]
-			if B.has(ln):
+			if B.has(ln) and int(B[ln]) >= 0:
 				_fingers_l.append([B[ln], s])
-			if B.has(rn):
+			if B.has(rn) and int(B[rn]) >= 0:
 				_fingers_r.append([B[rn], s])
 
 
@@ -237,13 +266,13 @@ func set_gear(eq: Dictionary, slot: int) -> void:
 	var helmet: bool = eq.get("h", "none") == "h1"
 	if hats:
 		hats.visible = helmet
-	if helmet:
+	if helmet and model_id == 0:
 		_box(head_gear, Vector3(0.04, 0.03, 0.02), Vector3(0.0, 1.77, -0.125), mat("black"))  # кріплення ПНБ
 		for s in [-1.0, 1.0]:
 			_cyl(head_gear, 0.045, 0.035, Vector3(s * 0.105, 1.68, 0.02), mat("olive"), Vector3(0, 0, PI * 0.5))  # навушники
 
 	# броня: базова плитоноска вже на моделі, вищі класи додають елементи
-	var a: String = eq.get("a", "none")
+	var a: String = eq.get("a", "none") if model_id == 0 else "none"
 	if a != "none":
 		_box(gear_root, Vector3(0.035, 0.065, 0.03), Vector3(0.13, 1.37, -0.19), mat("red"))  # турнікет
 		_box(gear_root, Vector3(0.05, 0.11, 0.04), Vector3(-0.17, 1.35, 0.02), mat("black"))  # рація
@@ -258,7 +287,7 @@ func set_gear(eq: Dictionary, slot: int) -> void:
 			_box(gear_root, Vector3(0.11, 0.12, 0.17), Vector3(s * 0.25, 1.43, 0.02), mat("coyote"))  # наплічники
 
 	# розгрузка на поясі
-	var r: String = eq.get("r", "none")
+	var r: String = eq.get("r", "none") if model_id == 0 else "none"
 	if r != "none":
 		var n: int = {"light": 2, "assault": 4}.get(r, 0)
 		for i in n:
@@ -529,6 +558,55 @@ var _dir_s := Vector2(0.0, 1.0)
 var _last_yaw := 0.0
 var _turn_s := 0.0
 var _throw_t := 0.0
+var _mc_t := 0.0          # фаза мокап-циклу (0..1)
+var _mc_w := 0.0          # вага мокапу
+var _mc_run := 0.0        # змішування ходьба/біг
+
+## Записані рухи (motion capture): цикли ходьби і бігу, запечені в простір персонажа.
+static var _clips := {}
+
+
+static func _clip(name: String) -> Dictionary:
+	if _clips.has(name):
+		return _clips[name]
+	var d := {}
+	var f := FileAccess.open("res://anims/%s.json" % name, FileAccess.READ)
+	if f:
+		var j = JSON.parse_string(f.get_as_text())
+		if typeof(j) == TYPE_DICTIONARY:
+			var frames: Array = []
+			for fr in j.frames:
+				var q := {}
+				for b in fr:
+					var a: Array = fr[b]
+					q[b] = Quaternion(a[0], a[1], a[2], a[3]).normalized()
+				frames.append(q)
+			var hips: Array = []
+			for h in j.hips:
+				hips.append(Vector3(h[0], h[1], h[2]))
+			d = {"frames": frames, "hips": hips, "n": int(j.n), "cycle": float(j.cycle_s)}
+	_clips[name] = d
+	return d
+
+
+## Поза з кліпу в момент t (0..1): глобальні повороти кісток і зсув таза.
+static func _sample(c: Dictionary, t: float) -> Array:
+	var n: int = c.n
+	var x := fposmod(t, 1.0) * n
+	var i0 := int(x) % n
+	var i1 := (i0 + 1) % n
+	var a := x - floorf(x)
+	var f0: Dictionary = c.frames[i0]
+	var f1: Dictionary = c.frames[i1]
+	var out := {}
+	for b in f0:
+		out[b] = (f0[b] as Quaternion).slerp(f1[b], a)
+	var h: Vector3 = (c.hips[i0] as Vector3).lerp(c.hips[i1], a)
+	return [out, h]
+
+
+static func _qmix(q0: Quaternion, q1: Quaternion, w: float) -> Quaternion:
+	return q0.slerp(q1, clampf(w, 0.0, 1.0))
 
 
 func set_pose(is_crouch: bool, is_aiming: bool) -> void:
@@ -589,6 +667,32 @@ func animate(speed: float, delta: float) -> void:
 	var lk := _lean_k * stand
 	var ak := _air_k * stand
 
+	# --- мокап: ходьба і біг вперед/назад; убік і в присіді — процедурно
+	var walk_c := _clip("walk")
+	var run_c := _clip("run")
+	var mc_ok := not walk_c.is_empty() and not run_c.is_empty()
+	var fwdness := clampf((absf(_dir_s.y) - 0.35) / 0.5, 0.0, 1.0)
+	var mw_target := clampf((_speed_s - 0.6) / 1.2, 0.0, 1.0) * fwdness * stand * (1.0 - _crouch_k) * (1.0 - ak) if mc_ok else 0.0
+	_mc_w = move_toward(_mc_w, mw_target, dt * 4.0)
+	_mc_run = move_toward(_mc_run, clampf((_speed_s - 2.6) / 1.6, 0.0, 1.0), dt * 3.0)
+	var mc_q := {}
+	var mc_h := Vector3.ZERO
+	if _mc_w > 0.001:
+		var cyc := lerpf(float(walk_c.cycle), float(run_c.cycle), _mc_run)
+		var ref := lerpf(1.8, 4.6, _mc_run)
+		var rate := clampf(_speed_s / ref, 0.55, 1.8)
+		var dirs := 1.0 if _dir_s.y >= 0.0 else -1.0
+		_mc_t = fposmod(_mc_t + dt * rate / maxf(cyc, 0.2) * dirs, 1.0)
+		var sw0 := _sample(walk_c, _mc_t)
+		var sr0 := _sample(run_c, _mc_t)
+		var qw: Dictionary = sw0[0]
+		var qr: Dictionary = sr0[0]
+		for b in qw:
+			mc_q[b] = (qw[b] as Quaternion).slerp(qr.get(b, qw[b]), _mc_run)
+		mc_h = (sw0[1] as Vector3).lerp(sr0[1], _mc_run)
+		# процедурна фаза йде в ногу з мокапом (для рук і хитання зброї)
+		_phase = _mc_t * TAU
+
 	# напрям кроку: вісь махання ноги перпендикулярна руху
 	var mdir := Vector3(_dir_s.x, 0.0, -_dir_s.y)
 	if mdir.length() < 0.2:
@@ -613,9 +717,13 @@ func animate(speed: float, delta: float) -> void:
 	var hip_roll := sin(_phase) * 0.05 * k * stand
 	var q_h := Quaternion(UP, -blade - sin(_phase) * (0.08 + sk * 0.04) * k + pk * sin(_phase) * 0.12 * k) \
 		* Quaternion(RIGHT, (-0.06 * k - duck * 0.2 - sk * 0.12) * stand - PI * 0.5 * pk) * Quaternion(BACK_Z, hip_roll)
+	var mw := _mc_w
+	if mw > 0.001:
+		hips_off += Vector3(mc_h.x * 0.6, mc_h.y, 0.0) * mw
+		q_h = q_h * _qmix(Quaternion.IDENTITY, mc_q.get("Hips", Quaternion.IDENTITY), mw * 0.8)
 	var ih := _bi("Hips")
 	var p_h: Vector3 = RP[ih] + hips_off
-	skel.set_bone_pose_position(ih, _to_skel * p_h)
+	skel.set_bone_pose_position(ih, _hips_parent_inv * (_to_skel * p_h))
 	_set_abs(ih, q_h, Quaternion.IDENTITY)
 
 	# --- ноги
@@ -631,12 +739,31 @@ func animate(speed: float, delta: float) -> void:
 	var crawl_r := maxf(0.0, -sin(_phase)) * 0.9 * k * pk
 	var swing_l := Quaternion(swing_ax, hl - (kneel * 1.45 + duck * 0.8 + air_h)) * Quaternion(RIGHT, kneel * 1.45 + duck * 0.8 + air_h)
 	var swing_r := Quaternion(swing_ax, hr - (kneel * 0.2 + duck * 0.8 + air_h * 0.6)) * Quaternion(RIGHT, kneel * 0.2 + duck * 0.8 + air_h * 0.6)
-	_set_rel(_bi("LeftUpLeg"), leg_yaw * swing_l * Quaternion(BACK_Z, -0.04 - pk * 0.12 - crawl_l * 0.6))
-	_set_rel(_bi("RightUpLeg"), leg_yaw * swing_r * Quaternion(BACK_Z, 0.04 + kneel * 0.08 + pk * 0.12 + crawl_r * 0.6))
-	_set_rel(_bi("LeftLeg"), Quaternion(RIGHT, -kl - crawl_l * 1.3))
-	_set_rel(_bi("RightLeg"), Quaternion(RIGHT, -kr - crawl_r * 1.3))
-	_set_rel(_bi("LeftFoot"), Quaternion(RIGHT, clampf(kl - hl, -0.6, 0.9) * (1.0 - kneel) * stand + pk * -0.4))
-	_set_rel(_bi("RightFoot"), Quaternion(RIGHT, clampf(kr - hr, -0.6, 0.9) * (1.0 - kneel) * stand + kneel * 0.75 + pk * -0.4))
+	var e_lul := leg_yaw * swing_l * Quaternion(BACK_Z, -0.04 - pk * 0.12 - crawl_l * 0.6)
+	var e_rul := leg_yaw * swing_r * Quaternion(BACK_Z, 0.04 + kneel * 0.08 + pk * 0.12 + crawl_r * 0.6)
+	var e_ll := Quaternion(RIGHT, -kl - crawl_l * 1.3)
+	var e_rl := Quaternion(RIGHT, -kr - crawl_r * 1.3)
+	var e_lf := Quaternion(RIGHT, clampf(kl - hl, -0.6, 0.9) * (1.0 - kneel) * stand + pk * -0.4)
+	var e_rf := Quaternion(RIGHT, clampf(kr - hr, -0.6, 0.9) * (1.0 - kneel) * stand + kneel * 0.75 + pk * -0.4)
+	if mw > 0.001 and mc_q.has("LeftUpLeg"):
+		# записані рухи ніг: відносні повороти «батько -> кістка»
+		var hq: Quaternion = mc_q.get("Hips", Quaternion.IDENTITY)
+		var lu: Quaternion = mc_q.LeftUpLeg
+		var ru: Quaternion = mc_q.RightUpLeg
+		var ll: Quaternion = mc_q.LeftLeg
+		var rl: Quaternion = mc_q.RightLeg
+		e_lul = _qmix(e_lul, leg_yaw * hq.inverse() * lu, mw)
+		e_rul = _qmix(e_rul, leg_yaw * hq.inverse() * ru, mw)
+		e_ll = _qmix(e_ll, lu.inverse() * ll, mw)
+		e_rl = _qmix(e_rl, ru.inverse() * rl, mw)
+		e_lf = _qmix(e_lf, ll.inverse() * (mc_q.LeftFoot as Quaternion), mw)
+		e_rf = _qmix(e_rf, rl.inverse() * (mc_q.RightFoot as Quaternion), mw)
+	_set_rel(_bi("LeftUpLeg"), e_lul)
+	_set_rel(_bi("RightUpLeg"), e_rul)
+	_set_rel(_bi("LeftLeg"), e_ll)
+	_set_rel(_bi("RightLeg"), e_rl)
+	_set_rel(_bi("LeftFoot"), e_lf)
+	_set_rel(_bi("RightFoot"), e_rf)
 
 	# --- корпус
 	var lean_f := (0.07 * k + kneel * 0.12 + duck * 0.2 + _aim_k * 0.05 + sk * 0.3) * stand
@@ -648,6 +775,12 @@ func animate(speed: float, delta: float) -> void:
 	var e_sp := Quaternion(UP, twist) * Quaternion(RIGHT, -lean_f * 0.4 + pitch_p * 0.22 + br + pk * 0.08) * Quaternion(BACK_Z, roll)
 	var e_sp1 := Quaternion(UP, twist) * Quaternion(RIGHT, -lean_f * 0.3 + pitch_p * 0.22 - br * 0.5 + pk * 0.06) * Quaternion(BACK_Z, roll)
 	var e_sp2 := Quaternion(UP, twist + sin(_phase) * 0.06 * k * stand - _turn_s * 0.02) * Quaternion(RIGHT, -lean_f * 0.3 + pitch_p * 0.22) * Quaternion(BACK_Z, roll)
+	if mw > 0.001 and mc_q.has("Spine2"):
+		var hq2: Quaternion = mc_q.get("Hips", Quaternion.IDENTITY)
+		var sk_w := mw * (0.35 if hold else 0.8)
+		e_sp = e_sp * _qmix(Quaternion.IDENTITY, hq2.inverse() * (mc_q.Spine as Quaternion), sk_w)
+		e_sp1 = e_sp1 * _qmix(Quaternion.IDENTITY, (mc_q.Spine as Quaternion).inverse() * (mc_q.Spine1 as Quaternion), sk_w)
+		e_sp2 = e_sp2 * _qmix(Quaternion.IDENTITY, (mc_q.Spine1 as Quaternion).inverse() * (mc_q.Spine2 as Quaternion), sk_w)
 	var isp := _bi("Spine")
 	var isp1 := _bi("Spine1")
 	var isp2 := _bi("Spine2")

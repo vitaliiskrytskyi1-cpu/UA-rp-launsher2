@@ -4,6 +4,7 @@ extends CharacterBody3D
 
 const Gear = preload("res://gear.gd")
 const Character = preload("res://character.gd")
+const Settings = preload("res://settings.gd")
 const Sfx = preload("res://sfx.gd")
 const World = preload("res://world.gd")
 
@@ -94,7 +95,7 @@ func setup(m, t, is_bot: bool) -> void:
 
 	model = Character.new()
 	add_child(model)
-	model.setup(main.team_color(main.my_team))
+	model.setup(main.team_color(main.my_team), main.my_team)
 
 	head = Node3D.new()
 	head.position.y = 1.55
@@ -529,9 +530,11 @@ func _aim_point(maxd: float = 500.0) -> Vector3:
 
 
 func _soldier_process(delta: float, mv: Vector2, look: Vector2, firing: bool, jump: bool, reload: bool) -> void:
-	var sens := LOOK_SENS * (0.45 if aiming else 1.0)
+	var sens := LOOK_SENS * (0.45 * float(Settings.value("controls", "aim_sens", 1.0)) if aiming else float(Settings.value("controls", "sens", 1.0)))
 	if aiming and slot == 0 and wdata.zoom < 30.0:
 		sens *= 0.5
+	if int(Settings.value("controls", "invert_y", 0)) == 1:
+		look.y = -look.y
 	yaw -= look.x * sens
 	pitch = clampf(pitch - look.y * sens, -80.0, 75.0)
 	rotation_degrees.y = yaw
@@ -717,8 +720,11 @@ func _drone_process(delta: float, mv: Vector2, look: Vector2, up: bool, down: bo
 	if drone_node == null:
 		return
 	# огляд: вліво-вправо — розворот дрона, вгору-вниз — нахил камери
-	drone_yaw -= look.x * LOOK_SENS
-	drone_tilt = clampf(drone_tilt - look.y * LOOK_SENS, -80.0, 25.0)
+	var dsens := LOOK_SENS * float(Settings.value("controls", "drone_sens", 1.0))
+	if int(Settings.value("controls", "invert_y", 0)) == 1:
+		look.y = -look.y
+	drone_yaw -= look.x * dsens
+	drone_tilt = clampf(drone_tilt - look.y * dsens, -80.0, 25.0)
 	var yb := Basis(Vector3.UP, deg_to_rad(drone_yaw))
 	var fwd := -yb.z
 	var right := yb.x

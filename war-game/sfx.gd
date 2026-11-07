@@ -89,6 +89,7 @@ static func play(parent: Node, kind: String, pos = null, volume_db: float = 0.0,
 		a.stream = get_sound(kind)
 		a.volume_db = volume_db
 		a.pitch_scale = pitch
+		a.bus = "SFX" if AudioServer.get_bus_index("SFX") >= 0 else "Master"
 		p = a
 		parent.add_child(a)
 		a.play()
@@ -99,6 +100,7 @@ static func play(parent: Node, kind: String, pos = null, volume_db: float = 0.0,
 		a3.volume_db = volume_db
 		a3.pitch_scale = pitch
 		a3.unit_size = 12.0
+		a3.bus = "SFX" if AudioServer.get_bus_index("SFX") >= 0 else "Master"
 		a3.max_distance = 400.0
 		p = a3
 		parent.add_child(a3)

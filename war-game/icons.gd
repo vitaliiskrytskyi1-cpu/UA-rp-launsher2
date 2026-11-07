@@ -166,6 +166,29 @@ static func draw(ci: CanvasItem, name: String, c: Vector2, s: float, col: Color)
 			ci.draw_arc(c + Vector2(0, s * 0.3), s * 0.3, PI, TAU, 16, col, w * 1.2)
 			_arrow2(ci, c + Vector2(-s * 0.42, -s * 0.12), s * 0.2, col, w, -1.0)
 			_arrow2(ci, c + Vector2(s * 0.42, -s * 0.12), s * 0.2, col, w, 1.0)
+		"star":
+			var pts := PackedVector2Array()
+			for i in 10:
+				var a := -PI * 0.5 + TAU * i / 10.0
+				var rr := s * (0.46 if i % 2 == 0 else 0.19)
+				pts.append(c + Vector2(cos(a), sin(a)) * rr)
+			ci.draw_colored_polygon(pts, col)
+		"radio":
+			ci.draw_rect(Rect2(c + Vector2(-s * 0.22, -s * 0.12), Vector2(s * 0.44, s * 0.56)), col)
+			ci.draw_line(c + Vector2(s * 0.12, -s * 0.12), c + Vector2(s * 0.16, -s * 0.48), col, w)
+			ci.draw_arc(c + Vector2(s * 0.16, -s * 0.48), s * 0.12, -2.4, -0.7, 10, col, w * 0.7)
+			ci.draw_rect(Rect2(c + Vector2(-s * 0.14, -s * 0.02), Vector2(s * 0.28, s * 0.12)), Color(0, 0, 0, 0.5))
+		"medkit":
+			ci.draw_rect(Rect2(c - Vector2(s * 0.4, s * 0.3), Vector2(s * 0.8, s * 0.6)), col)
+			ci.draw_rect(Rect2(c - Vector2(s * 0.06, s * 0.2), Vector2(s * 0.12, s * 0.4)), Color(0.8, 0.1, 0.1))
+			ci.draw_rect(Rect2(c - Vector2(s * 0.2, s * 0.06), Vector2(s * 0.4, s * 0.12)), Color(0.8, 0.1, 0.1))
+		"gear":
+			for i in 8:
+				var a := TAU * i / 8.0
+				var d := Vector2(cos(a), sin(a))
+				ci.draw_line(c + d * s * 0.26, c + d * s * 0.44, col, s * 0.13)
+			ci.draw_arc(c, s * 0.27, 0.0, TAU, 28, col, s * 0.12)
+			ci.draw_arc(c, s * 0.1, 0.0, TAU, 16, col, w)
 		"close":
 			ci.draw_line(c + Vector2(-s * 0.3, -s * 0.3), c + Vector2(s * 0.3, s * 0.3), col, w * 1.3)
 			ci.draw_line(c + Vector2(s * 0.3, -s * 0.3), c + Vector2(-s * 0.3, s * 0.3), col, w * 1.3)

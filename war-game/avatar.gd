@@ -11,10 +11,10 @@ var _last_pos := Vector3.ZERO
 var _speed := 0.0
 
 
-func setup(nick: String, team_color: Color) -> void:
+func setup(nick: String, team_color: Color, model_id: int = 0) -> void:
 	model = Character.new()
 	add_child(model)
-	model.setup(team_color)
+	model.setup(team_color, model_id)
 	var label := Label3D.new()
 	label.text = nick
 	label.modulate = team_color

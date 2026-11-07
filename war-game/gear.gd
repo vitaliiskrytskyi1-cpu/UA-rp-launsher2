@@ -1,6 +1,28 @@
 extends RefCounted
 ## Каталог спорядження і економіка. Спільний для сервера і клієнта.
 
+## Команди і військові спеціалізації (ролі). Місця на роль у кожній команді.
+const TEAM_SIZE := 20
+const ROLE_ORDER := ["cmd", "mortar", "fpv", "medic", "rifle", "eng", "radio", "mg"]
+const ROLES := {
+	"cmd": {"name": "Командир", "slots": 1, "icon": "star", "desc": "Керує загоном. Посилена броня 4 класу, шолом і АК-74.",
+		"kit": {"w": "ak74", "a": "a4", "h": "h1"}, "free": {"mags": 2, "gren": 1}},
+	"mortar": {"name": "Мінометник", "slots": 2, "icon": "mortar", "desc": "82-мм міномет і запас мін. Б'є по позиціях за 60–450 м.",
+		"kit": {"x": "mortar", "p": "m"}, "free": {"heavy": 4}},
+	"fpv": {"name": "Оператор FPV", "slots": 3, "icon": "drone", "desc": "Великий рюкзак і три FPV-дрони-камікадзе.",
+		"kit": {"p": "l"}, "free": {"drones": 3}},
+	"medic": {"name": "Медик", "slots": 2, "icon": "medkit", "desc": "Розгрузка з аптечками: лікує себе і швидше повертає в бій.",
+		"kit": {"r": "light"}, "free": {"med": 4}},
+	"rifle": {"name": "Стрілець", "slots": 8, "icon": "rifle", "desc": "Основа загону: автомат, магазини і гранати.",
+		"kit": {}, "free": {"mags": 2, "gren": 2}},
+	"eng": {"name": "Інженер", "slots": 1, "icon": "rpg", "desc": "РПГ-7 проти техніки і укріплень, запас гранат.",
+		"kit": {"x": "rpg"}, "free": {"heavy": 2, "gren": 2}},
+	"radio": {"name": "Радист", "slots": 1, "icon": "radio", "desc": "Зв'язок і розвідка: рація, легка розгрузка і дрон-розвідник.",
+		"kit": {"r": "light"}, "free": {"drones": 1, "mags": 1}},
+	"mg": {"name": "Кулеметник", "slots": 2, "icon": "pkm", "desc": "Кулемет ПКМ на 100 набоїв і штурмова розгрузка.",
+		"kit": {"w": "pkm", "r": "assault"}, "free": {"mags": 2}},
+}
+
 const START_MONEY := 4000
 ## Тестовий режим: гроші не закінчуються.
 const UNLIMITED_MONEY := true
