@@ -1,0 +1,51 @@
+name: Fetch free assets
+on:
+  workflow_dispatch:
+  push:
+    paths: [".github/workflows/fetch-assets.yml"]
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download CC0 sounds
+        run: |
+          sudo apt-get -qq update && sudo apt-get -qq install -y p7zip-full ffmpeg unzip > /dev/null
+          mkdir -p raw out && cd raw
+          B=https://opengameart.org/sites/default/files
+          for u in "Prepared%20SFX%20Library.7z" "sounds.zip" "NenadSimic%20-%20Muffled%20Distant%20Explosion.wav" "gunreload1.wav" "assaultriflereload1_0.wav" "%5Bkdd%5DDifferentSteps_0.zip" "drone53.wav" "drone57.wav" "drone61.wav" "launch.7z" "synthetic_explosion_1.flac" "equipment_clicks3.wav" "100-CC0-SFX_0.zip" "sfx_100_v2.zip"; do
+            f=$(python3 -c "import urllib.parse,sys;print(urllib.parse.unquote(sys.argv[1]))" "$u")
+            curl -sfSL -o "$f" "$B/$u" || echo "FAIL $u"
+          done
+          ls -la
+          for z in *.7z; do 7z x -y -o"x_${z%.7z}" "$z" > /dev/null || true; done
+          for z in *.zip; do unzip -q -o "$z" -d "x_${z%.zip}" || true; done
+          cd ..
+          find raw -type f \( -iname '*.wav' -o -iname '*.flac' -o -iname '*.ogg' -o -iname '*.mp3' \) | sort > out/list_all.txt
+          wc -l out/list_all.txt
+      - name: Convert to small ogg
+        run: |
+          python3 - <<'PY'
+          import os, subprocess, re
+          files=[l.strip() for l in open('out/list_all.txt')]
+          os.makedirs('out/snd', exist_ok=True)
+          idx=[]
+          for i,f in enumerate(files):
+              base=re.sub(r'[^A-Za-z0-9_.-]+','_',f.replace('raw/',''))[-110:]
+              dst='out/snd/%04d_%s.ogg'%(i, os.path.splitext(base)[0])
+              r=subprocess.run(['ffmpeg','-v','error','-y','-i',f,'-ac','1','-ar','32000','-t','12','-c:a','libvorbis','-q:a','3',dst])
+              if r.returncode==0:
+                  idx.append('%s\t%s'%(os.path.basename(dst), f))
+          open('out/index.txt','w').write('\n'.join(idx))
+          print(len(idx))
+          PY
+          du -sh out
+      - name: Push to branch assets-raw
+        run: |
+          cd out
+          git init -q && git checkout -q -b assets-raw
+          git config user.name "ci" && git config user.email "ci@example.com"
+          git add -A && git commit -qm "Free CC0 sounds (OpenGameArt)"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" assets-raw
