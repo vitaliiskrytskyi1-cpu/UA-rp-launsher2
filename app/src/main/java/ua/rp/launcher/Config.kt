@@ -19,7 +19,7 @@ object Config {
     const val CDN_URL = "https://raw.githubusercontent.com/vitaliiskrytskyi1-cpu/UA-rp-launsher2/main/hosting/"
 
     /** Пакет ігрового клієнта SA:MP для Android, який запускає кнопка «Грати». */
-    const val CLIENT_PACKAGE = "com.samp.mobile"
+    const val CLIENT_PACKAGE = "gta.ua.apk"
 
     /** Офіційна GTA San Andreas з Google Play — гравець купує її сам. */
     const val GTA_PACKAGE = "com.rockstargames.gtasa"
