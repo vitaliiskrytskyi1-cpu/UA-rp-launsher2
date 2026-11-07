@@ -9,7 +9,7 @@ const Avatar = preload("res://avatar.gd")
 const TouchUI = preload("res://touch.gd")
 
 const VERSION := 1
-const DEFAULT_ADDR := "127.0.0.1:7000"
+const DEFAULT_ADDR := "147.185.221.217:11983"
 const DEFAULT_PORT := 7000
 const MAX_PLAYERS := 40
 const RESPAWN_TIME := 5.0
@@ -1039,7 +1039,10 @@ func _build_ui() -> void:
 
 	addr_edit = LineEdit.new()
 	addr_edit.placeholder_text = "Адреса сервера"
-	addr_edit.text = str(cfg.get_value("main", "addr", DEFAULT_ADDR))
+	var saved_addr := str(cfg.get_value("main", "addr", DEFAULT_ADDR))
+	if saved_addr == "" or saved_addr.begins_with("127.0.0.1"):
+		saved_addr = DEFAULT_ADDR
+	addr_edit.text = saved_addr
 	addr_edit.add_theme_font_size_override("font_size", 24)
 	addr_edit.custom_minimum_size = Vector2(0, 56)
 	box.add_child(addr_edit)

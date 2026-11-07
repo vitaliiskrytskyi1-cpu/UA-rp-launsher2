@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths-ignore:
       - "server/**"
+      - "war-game/**"
+      - ".github/workflows/build-war.yml"
       - ".github/workflows/build-server.yml"
   workflow_dispatch:
 
