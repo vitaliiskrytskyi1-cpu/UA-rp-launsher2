@@ -343,7 +343,7 @@ func _physics_process(delta: float) -> void:
 		if drone_active and drone_node:
 			dpos = drone_node.global_position
 			dyaw = deg_to_rad(drone_yaw)
-		var mode := (1 if drone_active else 0) | (2 if crouching else 0)
+		var mode := (1 if drone_active else 0) | (2 if crouching else 0) | (4 if aiming else 0)
 		main.send_state(global_position, rotation.y, head.rotation.x, mode, dpos, dyaw)
 
 
@@ -390,6 +390,7 @@ func _soldier_process(delta: float, mv: Vector2, look: Vector2, firing: bool, ju
 	if global_position.y < -12.0:
 		global_position = Vector3(global_position.x, 2.0, global_position.z)
 	var hs := Vector2(velocity.x, velocity.z).length()
+	model.look_pitch = head.rotation.x
 	model.animate(hs, delta)
 	if hs > 0.5 and is_on_floor():
 		step_t -= delta * hs / 4.0

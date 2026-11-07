@@ -11,8 +11,9 @@ const Gear = preload("res://gear.gd")
 const Sfx = preload("res://sfx.gd")
 const HudMap = preload("res://hudmap.gd")
 const Inventory = preload("res://inventory.gd")
+static var _fpv_scene: PackedScene
 
-const VERSION := 3
+const VERSION := 4
 const DEFAULT_ADDR := "147.185.221.217:11983"
 const DEFAULT_PORT := 7000
 const MAX_PLAYERS := 40
@@ -312,6 +313,7 @@ func srv_state(pos: Vector3, yaw: float, pitch: float, mode: int, dpos: Vector3,
 	p.yaw = yaw
 	p.pitch = pitch
 	p.crouch = (mode & 2) != 0
+	p.aim = (mode & 4) != 0
 	if p.mode == 1 and (mode & 1) == 1:
 		if p.dpos.distance_to(dpos) < 40.0:
 			p.dpos = dpos
@@ -799,7 +801,7 @@ func _send_snapshot() -> void:
 		if not p.alive:
 			continue
 		ids.append(pid)
-		var m := int(p.mode) | (2 if p.crouch else 0)
+		var m := int(p.mode) | (2 if p.crouch else 0) | (4 if p.get("aim", false) else 0)
 		var vals := [p.pos.x, p.pos.y, p.pos.z, p.yaw, p.pitch, float(m), p.dpos.x, p.dpos.y, p.dpos.z, p.dyaw, float(p.slot)]
 		for v in vals:
 			data.append(v)
@@ -1126,7 +1128,8 @@ func cl_snapshot(ids: PackedInt32Array, data: PackedFloat32Array) -> void:
 			a.visible = true
 		var mode := int(data[b + 5])
 		if avatars.has(id):
-			avatars[id].model.set_pose((mode & 2) != 0, false)
+			avatars[id].model.set_pose((mode & 2) != 0, (mode & 4) != 0)
+			avatars[id].model.look_pitch = data[b + 4]
 		if (mode & 1) == 1:
 			var dpos := Vector3(data[b + 6], data[b + 7], data[b + 8])
 			if not remote_drones.has(id) and players.has(id):
@@ -1318,57 +1321,37 @@ func make_drone(team: int) -> Node3D:
 	var d := Node3D.new()
 	var body_root := Node3D.new()
 	d.add_child(body_root)
-	var body_m := StandardMaterial3D.new()
-	body_m.albedo_color = Color(0.12, 0.12, 0.12)
 	var light_m := StandardMaterial3D.new()
 	light_m.albedo_color = TEAM_COLORS[team]
 	light_m.emission_enabled = true
 	light_m.emission = TEAM_COLORS[team]
-	var body := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = Vector3(0.12, 0.05, 0.22)
-	body.mesh = bm
-	body.material_override = body_m
-	body_root.add_child(body)
-	for x in [-0.15, 0.15]:
-		for z in [-0.15, 0.15]:
-			var armm := MeshInstance3D.new()
-			var am := BoxMesh.new()
-			am.size = Vector3(0.02, 0.015, 0.2)
-			armm.mesh = am
-			armm.material_override = body_m
-			armm.position = Vector3(x * 0.5, 0.0, z * 0.5)
-			armm.rotation.y = atan2(x, z)
-			body_root.add_child(armm)
+	# 3D-модель FPV-дрона з бойовою частиною
+	if _fpv_scene == null:
+		_fpv_scene = load("res://models/fpv.glb")
+	var fpv: Node3D = _fpv_scene.instantiate()
+	body_root.add_child(fpv)
+	# розмиті диски пропелерів, що обертаються
+	for x in [-0.147, 0.147]:
+		for z in [-0.187, 0.187]:
 			var prop := MeshInstance3D.new()
 			var cm := CylinderMesh.new()
-			cm.top_radius = 0.08
-			cm.bottom_radius = 0.08
-			cm.height = 0.006
-			cm.radial_segments = 10
+			cm.top_radius = 0.075
+			cm.bottom_radius = 0.075
+			cm.height = 0.004
+			cm.radial_segments = 14
 			prop.mesh = cm
 			prop.material_override = smoke_mat
-			prop.position = Vector3(x, 0.03, z)
+			prop.position = Vector3(x, 0.02, z)
+			prop.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			body_root.add_child(prop)
 	var led := MeshInstance3D.new()
 	var lm := SphereMesh.new()
-	lm.radius = 0.025
-	lm.height = 0.05
+	lm.radius = 0.018
+	lm.height = 0.036
 	led.mesh = lm
 	led.material_override = light_m
-	led.position = Vector3(0.0, 0.04, -0.1)
+	led.position = Vector3(0.0, 0.045, 0.06)
 	body_root.add_child(led)
-	# бойова частина під дроном
-	var charge := MeshInstance3D.new()
-	var chm := CylinderMesh.new()
-	chm.top_radius = 0.04
-	chm.bottom_radius = 0.045
-	chm.height = 0.26
-	charge.mesh = chm
-	charge.material_override = rocket_mat if rocket_mat else body_m
-	charge.rotation.x = PI * 0.5
-	charge.position = Vector3(0.0, -0.06, -0.04)
-	body_root.add_child(charge)
 	return d
 
 
