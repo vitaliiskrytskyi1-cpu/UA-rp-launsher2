@@ -1,0 +1,277 @@
+0000_NenadSimic_-_Muffled_Distant_Explosion.ogg	raw/NenadSimic - Muffled Distant Explosion.wav
+0001_assaultriflereload1_0.ogg	raw/assaultriflereload1_0.wav
+0002_drone53.ogg	raw/drone53.wav
+0003_drone57.ogg	raw/drone57.wav
+0004_drone61.ogg	raw/drone61.wav
+0005_equipment_clicks3.ogg	raw/equipment_clicks3.wav
+0006_gunreload1.ogg	raw/gunreload1.wav
+0007_synthetic_explosion_1.ogg	raw/synthetic_explosion_1.flac
+0008_x_100-CC0-SFX_0_bell_01.ogg	raw/x_100-CC0-SFX_0/bell_01.ogg
+0009_x_100-CC0-SFX_0_bell_02.ogg	raw/x_100-CC0-SFX_0/bell_02.ogg
+0010_x_100-CC0-SFX_0_bell_03.ogg	raw/x_100-CC0-SFX_0/bell_03.ogg
+0011_x_100-CC0-SFX_0_dishes_01.ogg	raw/x_100-CC0-SFX_0/dishes_01.ogg
+0012_x_100-CC0-SFX_0_dishes_02.ogg	raw/x_100-CC0-SFX_0/dishes_02.ogg
+0013_x_100-CC0-SFX_0_dishes_03.ogg	raw/x_100-CC0-SFX_0/dishes_03.ogg
+0014_x_100-CC0-SFX_0_dishes_04.ogg	raw/x_100-CC0-SFX_0/dishes_04.ogg
+0015_x_100-CC0-SFX_0_door_01.ogg	raw/x_100-CC0-SFX_0/door_01.ogg
+0016_x_100-CC0-SFX_0_door_02.ogg	raw/x_100-CC0-SFX_0/door_02.ogg
+0017_x_100-CC0-SFX_0_door_close_01.ogg	raw/x_100-CC0-SFX_0/door_close_01.ogg
+0018_x_100-CC0-SFX_0_door_close_02.ogg	raw/x_100-CC0-SFX_0/door_close_02.ogg
+0019_x_100-CC0-SFX_0_door_close_03.ogg	raw/x_100-CC0-SFX_0/door_close_03.ogg
+0020_x_100-CC0-SFX_0_door_close_04.ogg	raw/x_100-CC0-SFX_0/door_close_04.ogg
+0021_x_100-CC0-SFX_0_door_open.ogg	raw/x_100-CC0-SFX_0/door_open.ogg
+0022_x_100-CC0-SFX_0_explosion.ogg	raw/x_100-CC0-SFX_0/explosion.ogg
+0023_x_100-CC0-SFX_0_glass_01.ogg	raw/x_100-CC0-SFX_0/glass_01.ogg
+0024_x_100-CC0-SFX_0_glass_02.ogg	raw/x_100-CC0-SFX_0/glass_02.ogg
+0025_x_100-CC0-SFX_0_glass_03.ogg	raw/x_100-CC0-SFX_0/glass_03.ogg
+0026_x_100-CC0-SFX_0_glass_04.ogg	raw/x_100-CC0-SFX_0/glass_04.ogg
+0027_x_100-CC0-SFX_0_glass_05.ogg	raw/x_100-CC0-SFX_0/glass_05.ogg
+0028_x_100-CC0-SFX_0_gong_01.ogg	raw/x_100-CC0-SFX_0/gong_01.ogg
+0029_x_100-CC0-SFX_0_gong_02.ogg	raw/x_100-CC0-SFX_0/gong_02.ogg
+0030_x_100-CC0-SFX_0_hit_01.ogg	raw/x_100-CC0-SFX_0/hit_01.ogg
+0031_x_100-CC0-SFX_0_hit_02.ogg	raw/x_100-CC0-SFX_0/hit_02.ogg
+0032_x_100-CC0-SFX_0_hit_03.ogg	raw/x_100-CC0-SFX_0/hit_03.ogg
+0033_x_100-CC0-SFX_0_hit_04.ogg	raw/x_100-CC0-SFX_0/hit_04.ogg
+0034_x_100-CC0-SFX_0_key_open_01.ogg	raw/x_100-CC0-SFX_0/key_open_01.ogg
+0035_x_100-CC0-SFX_0_key_open_02.ogg	raw/x_100-CC0-SFX_0/key_open_02.ogg
+0036_x_100-CC0-SFX_0_machine_01.ogg	raw/x_100-CC0-SFX_0/machine_01.ogg
+0037_x_100-CC0-SFX_0_machine_02.ogg	raw/x_100-CC0-SFX_0/machine_02.ogg
+0038_x_100-CC0-SFX_0_machine_03.ogg	raw/x_100-CC0-SFX_0/machine_03.ogg
+0039_x_100-CC0-SFX_0_metal_01.ogg	raw/x_100-CC0-SFX_0/metal_01.ogg
+0040_x_100-CC0-SFX_0_metal_02.ogg	raw/x_100-CC0-SFX_0/metal_02.ogg
+0041_x_100-CC0-SFX_0_metal_03.ogg	raw/x_100-CC0-SFX_0/metal_03.ogg
+0042_x_100-CC0-SFX_0_metal_04.ogg	raw/x_100-CC0-SFX_0/metal_04.ogg
+0043_x_100-CC0-SFX_0_metal_05.ogg	raw/x_100-CC0-SFX_0/metal_05.ogg
+0044_x_100-CC0-SFX_0_metal_06.ogg	raw/x_100-CC0-SFX_0/metal_06.ogg
+0045_x_100-CC0-SFX_0_metal_07.ogg	raw/x_100-CC0-SFX_0/metal_07.ogg
+0046_x_100-CC0-SFX_0_metal_08.ogg	raw/x_100-CC0-SFX_0/metal_08.ogg
+0047_x_100-CC0-SFX_0_metal_09.ogg	raw/x_100-CC0-SFX_0/metal_09.ogg
+0048_x_100-CC0-SFX_0_metal_10.ogg	raw/x_100-CC0-SFX_0/metal_10.ogg
+0049_x_100-CC0-SFX_0_metal_11.ogg	raw/x_100-CC0-SFX_0/metal_11.ogg
+0050_x_100-CC0-SFX_0_metal_12.ogg	raw/x_100-CC0-SFX_0/metal_12.ogg
+0051_x_100-CC0-SFX_0_microwave_door_close.ogg	raw/x_100-CC0-SFX_0/microwave_door_close.ogg
+0052_x_100-CC0-SFX_0_microwave_door_open.ogg	raw/x_100-CC0-SFX_0/microwave_door_open.ogg
+0053_x_100-CC0-SFX_0_noise_01.ogg	raw/x_100-CC0-SFX_0/noise_01.ogg
+0054_x_100-CC0-SFX_0_noise_02.ogg	raw/x_100-CC0-SFX_0/noise_02.ogg
+0055_x_100-CC0-SFX_0_other_01.ogg	raw/x_100-CC0-SFX_0/other_01.ogg
+0056_x_100-CC0-SFX_0_other_02.ogg	raw/x_100-CC0-SFX_0/other_02.ogg
+0057_x_100-CC0-SFX_0_other_03.ogg	raw/x_100-CC0-SFX_0/other_03.ogg
+0058_x_100-CC0-SFX_0_other_04.ogg	raw/x_100-CC0-SFX_0/other_04.ogg
+0059_x_100-CC0-SFX_0_other_05.ogg	raw/x_100-CC0-SFX_0/other_05.ogg
+0060_x_100-CC0-SFX_0_other_06.ogg	raw/x_100-CC0-SFX_0/other_06.ogg
+0061_x_100-CC0-SFX_0_other_07.ogg	raw/x_100-CC0-SFX_0/other_07.ogg
+0062_x_100-CC0-SFX_0_paper_01.ogg	raw/x_100-CC0-SFX_0/paper_01.ogg
+0063_x_100-CC0-SFX_0_paper_02.ogg	raw/x_100-CC0-SFX_0/paper_02.ogg
+0064_x_100-CC0-SFX_0_paper_03.ogg	raw/x_100-CC0-SFX_0/paper_03.ogg
+0065_x_100-CC0-SFX_0_paper_04.ogg	raw/x_100-CC0-SFX_0/paper_04.ogg
+0066_x_100-CC0-SFX_0_plop_01.ogg	raw/x_100-CC0-SFX_0/plop_01.ogg
+0067_x_100-CC0-SFX_0_plop_02.ogg	raw/x_100-CC0-SFX_0/plop_02.ogg
+0068_x_100-CC0-SFX_0_pot_01.ogg	raw/x_100-CC0-SFX_0/pot_01.ogg
+0069_x_100-CC0-SFX_0_pot_02.ogg	raw/x_100-CC0-SFX_0/pot_02.ogg
+0070_x_100-CC0-SFX_0_shot_01.ogg	raw/x_100-CC0-SFX_0/shot_01.ogg
+0071_x_100-CC0-SFX_0_shot_02.ogg	raw/x_100-CC0-SFX_0/shot_02.ogg
+0072_x_100-CC0-SFX_0_slam_01.ogg	raw/x_100-CC0-SFX_0/slam_01.ogg
+0073_x_100-CC0-SFX_0_slam_02.ogg	raw/x_100-CC0-SFX_0/slam_02.ogg
+0074_x_100-CC0-SFX_0_slam_03.ogg	raw/x_100-CC0-SFX_0/slam_03.ogg
+0075_x_100-CC0-SFX_0_slam_04.ogg	raw/x_100-CC0-SFX_0/slam_04.ogg
+0076_x_100-CC0-SFX_0_slam_05.ogg	raw/x_100-CC0-SFX_0/slam_05.ogg
+0077_x_100-CC0-SFX_0_slam_06.ogg	raw/x_100-CC0-SFX_0/slam_06.ogg
+0078_x_100-CC0-SFX_0_slam_07.ogg	raw/x_100-CC0-SFX_0/slam_07.ogg
+0079_x_100-CC0-SFX_0_splash_01.ogg	raw/x_100-CC0-SFX_0/splash_01.ogg
+0080_x_100-CC0-SFX_0_splash_02.ogg	raw/x_100-CC0-SFX_0/splash_02.ogg
+0081_x_100-CC0-SFX_0_spring_01.ogg	raw/x_100-CC0-SFX_0/spring_01.ogg
+0082_x_100-CC0-SFX_0_spring_02.ogg	raw/x_100-CC0-SFX_0/spring_02.ogg
+0083_x_100-CC0-SFX_0_spring_03.ogg	raw/x_100-CC0-SFX_0/spring_03.ogg
+0084_x_100-CC0-SFX_0_spring_04.ogg	raw/x_100-CC0-SFX_0/spring_04.ogg
+0085_x_100-CC0-SFX_0_spring_05.ogg	raw/x_100-CC0-SFX_0/spring_05.ogg
+0086_x_100-CC0-SFX_0_spring_06.ogg	raw/x_100-CC0-SFX_0/spring_06.ogg
+0087_x_100-CC0-SFX_0_spring_07.ogg	raw/x_100-CC0-SFX_0/spring_07.ogg
+0088_x_100-CC0-SFX_0_spring_08.ogg	raw/x_100-CC0-SFX_0/spring_08.ogg
+0089_x_100-CC0-SFX_0_spring_09.ogg	raw/x_100-CC0-SFX_0/spring_09.ogg
+0090_x_100-CC0-SFX_0_switch_01.ogg	raw/x_100-CC0-SFX_0/switch_01.ogg
+0091_x_100-CC0-SFX_0_switch_02.ogg	raw/x_100-CC0-SFX_0/switch_02.ogg
+0092_x_100-CC0-SFX_0_toilet_01.ogg	raw/x_100-CC0-SFX_0/toilet_01.ogg
+0093_x_100-CC0-SFX_0_toilet_02.ogg	raw/x_100-CC0-SFX_0/toilet_02.ogg
+0094_x_100-CC0-SFX_0_tools_01.ogg	raw/x_100-CC0-SFX_0/tools_01.ogg
+0095_x_100-CC0-SFX_0_tools_02.ogg	raw/x_100-CC0-SFX_0/tools_02.ogg
+0096_x_100-CC0-SFX_0_tools_03.ogg	raw/x_100-CC0-SFX_0/tools_03.ogg
+0097_x_100-CC0-SFX_0_tools_04.ogg	raw/x_100-CC0-SFX_0/tools_04.ogg
+0098_x_100-CC0-SFX_0_tools_05.ogg	raw/x_100-CC0-SFX_0/tools_05.ogg
+0099_x_100-CC0-SFX_0_weird_01.ogg	raw/x_100-CC0-SFX_0/weird_01.ogg
+0100_x_100-CC0-SFX_0_weird_02.ogg	raw/x_100-CC0-SFX_0/weird_02.ogg
+0101_x_100-CC0-SFX_0_weird_03.ogg	raw/x_100-CC0-SFX_0/weird_03.ogg
+0102_x_100-CC0-SFX_0_weird_04.ogg	raw/x_100-CC0-SFX_0/weird_04.ogg
+0103_x_100-CC0-SFX_0_weird_05.ogg	raw/x_100-CC0-SFX_0/weird_05.ogg
+0104_x_100-CC0-SFX_0_wooded_box_open.ogg	raw/x_100-CC0-SFX_0/wooded_box_open.ogg
+0105_x_100-CC0-SFX_0_wooden_01.ogg	raw/x_100-CC0-SFX_0/wooden_01.ogg
+0106_x_100-CC0-SFX_0_wooden_02.ogg	raw/x_100-CC0-SFX_0/wooden_02.ogg
+0107_x_100-CC0-SFX_0_wooden_03.ogg	raw/x_100-CC0-SFX_0/wooden_03.ogg
+0108_x_Prepared_SFX_Library_Prepared_SFX_Library_1911_A_34P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/1911/A_34P.wav
+0109_x_Prepared_SFX_Library_Prepared_SFX_Library_1911_A_42P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/1911/A_42P.wav
+0110_x_Prepared_SFX_Library_Prepared_SFX_Library_1917_B_16P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/1917/B_16P.wav
+0111_x_Prepared_SFX_Library_Prepared_SFX_Library_1917_B_24P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/1917/B_24P.wav
+0112_x_Prepared_SFX_Library_Prepared_SFX_Library_AK-47_C_27P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/AK-47/C_27P.wav
+0113_x_Prepared_SFX_Library_Prepared_SFX_Library_AK-47_C_28P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/AK-47/C_28P.wav
+0114_x_Prepared_SFX_Library_Prepared_SFX_Library_AK-47_C_29P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/AK-47/C_29P.wav
+0115_x_Prepared_SFX_Library_Prepared_SFX_Library_AK-47_C_31P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/AK-47/C_31P.wav
+0116_x_Prepared_SFX_Library_Prepared_SFX_Library_AK-47_C_34P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/AK-47/C_34P.wav
+0117_x_Prepared_SFX_Library_Prepared_SFX_Library_AK-47_C_36P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/AK-47/C_36P.wav
+0118_x_Prepared_SFX_Library_Prepared_SFX_Library_AR-15_D_24P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/AR-15/D_24P.wav
+0119_x_Prepared_SFX_Library_Prepared_SFX_Library_AR-15_D_32P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/AR-15/D_32P.wav
+0120_x_Prepared_SFX_Library_Prepared_SFX_Library_Arisaka_E_18P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Arisaka/E_18P.wav
+0121_x_Prepared_SFX_Library_Prepared_SFX_Library_Arisaka_E_25P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Arisaka/E_25P.wav
+0122_x_Prepared_SFX_Library_Prepared_SFX_Library_Bersa_F_41P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Bersa/F_41P.wav
+0123_x_Prepared_SFX_Library_Prepared_SFX_Library_Bersa_F_47P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Bersa/F_47P.wav
+0124_x_Prepared_SFX_Library_Prepared_SFX_Library_CD_H_16P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/CD/H_16P.wav
+0125_x_Prepared_SFX_Library_Prepared_SFX_Library_CD_H_21P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/CD/H_21P.wav
+0126_x_Prepared_SFX_Library_Prepared_SFX_Library_Carl_Gustav_M45_G_20P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Carl Gustav M45/G_20P.wav
+0127_x_Prepared_SFX_Library_Prepared_SFX_Library_Carl_Gustav_M45_G_22P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Carl Gustav M45/G_22P.wav
+0128_x_Prepared_SFX_Library_Prepared_SFX_Library_Carl_Gustav_M45_G_24P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Carl Gustav M45/G_24P.wav
+0129_x_Prepared_SFX_Library_Prepared_SFX_Library_Carl_Gustav_M45_G_31P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Carl Gustav M45/G_31P.wav
+0130_x_Prepared_SFX_Library_Prepared_SFX_Library_Carl_Gustav_M45_G_33P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Carl Gustav M45/G_33P.wav
+0131_x_Prepared_SFX_Library_Prepared_SFX_Library_Carl_Gustav_M45_G_35P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Carl Gustav M45/G_35P.wav
+0132_x_Prepared_SFX_Library_Prepared_SFX_Library_Marlin_336_I_17P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Marlin 336/I_17P.wav
+0133_x_Prepared_SFX_Library_Prepared_SFX_Library_Marlin_336_I_22P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Marlin 336/I_22P.wav
+0134_x_Prepared_SFX_Library_Prepared_SFX_Library_Model_12_K_17P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Model 12/K_17P.wav
+0135_x_Prepared_SFX_Library_Prepared_SFX_Library_Model_12_K_22P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Model 12/K_22P.wav
+0136_x_Prepared_SFX_Library_Prepared_SFX_Library_Model_1894_L_17P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Model 1894/L_17P.wav
+0137_x_Prepared_SFX_Library_Prepared_SFX_Library_Model_1894_L_23P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Model 1894/L_23P.wav
+0138_x_Prepared_SFX_Library_Prepared_SFX_Library_Mosin_Nagant_M_21P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Mosin Nagant/M_21P.wav
+0139_x_Prepared_SFX_Library_Prepared_SFX_Library_Mosin_Nagant_M_26P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Mosin Nagant/M_26P.wav
+0140_x_Prepared_SFX_Library_Prepared_SFX_Library_Mossberg_N_26P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Mossberg/N_26P.wav
+0141_x_Prepared_SFX_Library_Prepared_SFX_Library_Mossberg_N_30P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Mossberg/N_30P.wav
+0142_x_Prepared_SFX_Library_Prepared_SFX_Library_Nova_O_17P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Nova/O_17P.wav
+0143_x_Prepared_SFX_Library_Prepared_SFX_Library_Nova_O_21P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Nova/O_21P.wav
+0144_x_Prepared_SFX_Library_Prepared_SFX_Library_PPSh_P_16P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/PPSh/P_16P.wav
+0145_x_Prepared_SFX_Library_Prepared_SFX_Library_PPSh_P_18P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/PPSh/P_18P.wav
+0146_x_Prepared_SFX_Library_Prepared_SFX_Library_PPSh_P_22P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/PPSh/P_22P.wav
+0147_x_Prepared_SFX_Library_Prepared_SFX_Library_PPSh_P_30P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/PPSh/P_30P.wav
+0148_x_Prepared_SFX_Library_Prepared_SFX_Library_PPSh_P_32P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/PPSh/P_32P.wav
+0149_x_Prepared_SFX_Library_Prepared_SFX_Library_PPSh_P_34P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/PPSh/P_34P.wav
+0150_x_Prepared_SFX_Library_Prepared_SFX_Library_Ruger_Mark_III_R_30P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Ruger Mark III/R_30P.wav
+0151_x_Prepared_SFX_Library_Prepared_SFX_Library_Ruger_Mark_III_R_35P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Ruger Mark III/R_35P.wav
+0152_x_Prepared_SFX_Library_Prepared_SFX_Library_Ruger_Single_Six_S_11P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Ruger Single Six/S_11P.wav
+0153_x_Prepared_SFX_Library_Prepared_SFX_Library_Ruger_Single_Six_S_14P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Ruger Single Six/S_14P.wav
+0154_x_Prepared_SFX_Library_Prepared_SFX_Library_SKS_U_14P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/SKS/U_14P.wav
+0155_x_Prepared_SFX_Library_Prepared_SFX_Library_SKS_U_19P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/SKS/U_19P.wav
+0156_x_Prepared_SFX_Library_Prepared_SFX_Library_Savage_10_.300_Blackout_T_17P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Savage 10 .300 Blackout/T_17P.wav
+0157_x_Prepared_SFX_Library_Prepared_SFX_Library_Savage_10_.300_Blackout_T_27P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Savage 10 .300 Blackout/T_27P.wav
+0158_x_Prepared_SFX_Library_Prepared_SFX_Library_Smith_Wesson_642_V_22P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Smith & Wesson 642/V_22P.wav
+0159_x_Prepared_SFX_Library_Prepared_SFX_Library_Smith_Wesson_642_V_27P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Smith & Wesson 642/V_27P.wav
+0160_x_Prepared_SFX_Library_Prepared_SFX_Library_Tikka_W_24P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Tikka/W_24P.wav
+0161_x_Prepared_SFX_Library_Prepared_SFX_Library_Tikka_W_29P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Tikka/W_29P.wav
+0162_x_Prepared_SFX_Library_Prepared_SFX_Library_Walther_PPQ_X_31P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Walther PPQ/X_31P.wav
+0163_x_Prepared_SFX_Library_Prepared_SFX_Library_Walther_PPQ_X_39P.ogg	raw/x_Prepared SFX Library/Prepared SFX Library/Walther PPQ/X_39P.wav
+0164_x__kdd_DifferentSteps_0_gravel.ogg	raw/x_[kdd]DifferentSteps_0/gravel.ogg
+0165_x__kdd_DifferentSteps_0_leaves01.ogg	raw/x_[kdd]DifferentSteps_0/leaves01.ogg
+0166_x__kdd_DifferentSteps_0_leaves02.ogg	raw/x_[kdd]DifferentSteps_0/leaves02.ogg
+0167_x__kdd_DifferentSteps_0_mud02.ogg	raw/x_[kdd]DifferentSteps_0/mud02.ogg
+0168_x__kdd_DifferentSteps_0_stone01.ogg	raw/x_[kdd]DifferentSteps_0/stone01.ogg
+0169_x__kdd_DifferentSteps_0_wood01.ogg	raw/x_[kdd]DifferentSteps_0/wood01.ogg
+0170_x__kdd_DifferentSteps_0_wood02.ogg	raw/x_[kdd]DifferentSteps_0/wood02.ogg
+0171_x__kdd_DifferentSteps_0_wood03.ogg	raw/x_[kdd]DifferentSteps_0/wood03.ogg
+0172_x_launch_launch_launch.ogg	raw/x_launch/launch/launch.wav
+0173_x_sfx_100_v2_sfx100v2_air_01.ogg	raw/x_sfx_100_v2/sfx100v2_air_01.ogg
+0174_x_sfx_100_v2_sfx100v2_air_02.ogg	raw/x_sfx_100_v2/sfx100v2_air_02.ogg
+0175_x_sfx_100_v2_sfx100v2_air_03.ogg	raw/x_sfx_100_v2/sfx100v2_air_03.ogg
+0176_x_sfx_100_v2_sfx100v2_door_01.ogg	raw/x_sfx_100_v2/sfx100v2_door_01.ogg
+0177_x_sfx_100_v2_sfx100v2_door_02.ogg	raw/x_sfx_100_v2/sfx100v2_door_02.ogg
+0178_x_sfx_100_v2_sfx100v2_door_03.ogg	raw/x_sfx_100_v2/sfx100v2_door_03.ogg
+0179_x_sfx_100_v2_sfx100v2_door_04.ogg	raw/x_sfx_100_v2/sfx100v2_door_04.ogg
+0180_x_sfx_100_v2_sfx100v2_door_05.ogg	raw/x_sfx_100_v2/sfx100v2_door_05.ogg
+0181_x_sfx_100_v2_sfx100v2_footstep_01.ogg	raw/x_sfx_100_v2/sfx100v2_footstep_01.ogg
+0182_x_sfx_100_v2_sfx100v2_footstep_02.ogg	raw/x_sfx_100_v2/sfx100v2_footstep_02.ogg
+0183_x_sfx_100_v2_sfx100v2_footstep_wet_01.ogg	raw/x_sfx_100_v2/sfx100v2_footstep_wet_01.ogg
+0184_x_sfx_100_v2_sfx100v2_footstep_wet_02.ogg	raw/x_sfx_100_v2/sfx100v2_footstep_wet_02.ogg
+0185_x_sfx_100_v2_sfx100v2_footstep_wet_03.ogg	raw/x_sfx_100_v2/sfx100v2_footstep_wet_03.ogg
+0186_x_sfx_100_v2_sfx100v2_footstep_wood_01.ogg	raw/x_sfx_100_v2/sfx100v2_footstep_wood_01.ogg
+0187_x_sfx_100_v2_sfx100v2_footstep_wood_02.ogg	raw/x_sfx_100_v2/sfx100v2_footstep_wood_02.ogg
+0188_x_sfx_100_v2_sfx100v2_footstep_wood_03.ogg	raw/x_sfx_100_v2/sfx100v2_footstep_wood_03.ogg
+0189_x_sfx_100_v2_sfx100v2_footstep_wood_04.ogg	raw/x_sfx_100_v2/sfx100v2_footstep_wood_04.ogg
+0190_x_sfx_100_v2_sfx100v2_glass_01.ogg	raw/x_sfx_100_v2/sfx100v2_glass_01.ogg
+0191_x_sfx_100_v2_sfx100v2_glass_02.ogg	raw/x_sfx_100_v2/sfx100v2_glass_02.ogg
+0192_x_sfx_100_v2_sfx100v2_glass_03.ogg	raw/x_sfx_100_v2/sfx100v2_glass_03.ogg
+0193_x_sfx_100_v2_sfx100v2_glass_04.ogg	raw/x_sfx_100_v2/sfx100v2_glass_04.ogg
+0194_x_sfx_100_v2_sfx100v2_glass_05.ogg	raw/x_sfx_100_v2/sfx100v2_glass_05.ogg
+0195_x_sfx_100_v2_sfx100v2_glass_06.ogg	raw/x_sfx_100_v2/sfx100v2_glass_06.ogg
+0196_x_sfx_100_v2_sfx100v2_hit_01.ogg	raw/x_sfx_100_v2/sfx100v2_hit_01.ogg
+0197_x_sfx_100_v2_sfx100v2_hit_02.ogg	raw/x_sfx_100_v2/sfx100v2_hit_02.ogg
+0198_x_sfx_100_v2_sfx100v2_hit_03.ogg	raw/x_sfx_100_v2/sfx100v2_hit_03.ogg
+0199_x_sfx_100_v2_sfx100v2_items_01.ogg	raw/x_sfx_100_v2/sfx100v2_items_01.ogg
+0200_x_sfx_100_v2_sfx100v2_items_02.ogg	raw/x_sfx_100_v2/sfx100v2_items_02.ogg
+0201_x_sfx_100_v2_sfx100v2_lock_open_01.ogg	raw/x_sfx_100_v2/sfx100v2_lock_open_01.ogg
+0202_x_sfx_100_v2_sfx100v2_loop_ambient_01.ogg	raw/x_sfx_100_v2/sfx100v2_loop_ambient_01.ogg
+0203_x_sfx_100_v2_sfx100v2_loop_ambient_02.ogg	raw/x_sfx_100_v2/sfx100v2_loop_ambient_02.ogg
+0204_x_sfx_100_v2_sfx100v2_loop_ambient_03.ogg	raw/x_sfx_100_v2/sfx100v2_loop_ambient_03.ogg
+0205_x_sfx_100_v2_sfx100v2_loop_ambient_04.ogg	raw/x_sfx_100_v2/sfx100v2_loop_ambient_04.ogg
+0206_x_sfx_100_v2_sfx100v2_loop_construction_site.ogg	raw/x_sfx_100_v2/sfx100v2_loop_construction_site.ogg
+0207_x_sfx_100_v2_sfx100v2_loop_highway.ogg	raw/x_sfx_100_v2/sfx100v2_loop_highway.ogg
+0208_x_sfx_100_v2_sfx100v2_loop_machine_01.ogg	raw/x_sfx_100_v2/sfx100v2_loop_machine_01.ogg
+0209_x_sfx_100_v2_sfx100v2_loop_machine_02.ogg	raw/x_sfx_100_v2/sfx100v2_loop_machine_02.ogg
+0210_x_sfx_100_v2_sfx100v2_loop_machine_03.ogg	raw/x_sfx_100_v2/sfx100v2_loop_machine_03.ogg
+0211_x_sfx_100_v2_sfx100v2_loop_machine_04.ogg	raw/x_sfx_100_v2/sfx100v2_loop_machine_04.ogg
+0212_x_sfx_100_v2_sfx100v2_loop_water_01.ogg	raw/x_sfx_100_v2/sfx100v2_loop_water_01.ogg
+0213_x_sfx_100_v2_sfx100v2_loop_water_02.ogg	raw/x_sfx_100_v2/sfx100v2_loop_water_02.ogg
+0214_x_sfx_100_v2_sfx100v2_loop_water_03.ogg	raw/x_sfx_100_v2/sfx100v2_loop_water_03.ogg
+0215_x_sfx_100_v2_sfx100v2_metal_01.ogg	raw/x_sfx_100_v2/sfx100v2_metal_01.ogg
+0216_x_sfx_100_v2_sfx100v2_metal_02.ogg	raw/x_sfx_100_v2/sfx100v2_metal_02.ogg
+0217_x_sfx_100_v2_sfx100v2_metal_03.ogg	raw/x_sfx_100_v2/sfx100v2_metal_03.ogg
+0218_x_sfx_100_v2_sfx100v2_metal_04.ogg	raw/x_sfx_100_v2/sfx100v2_metal_04.ogg
+0219_x_sfx_100_v2_sfx100v2_metal_05.ogg	raw/x_sfx_100_v2/sfx100v2_metal_05.ogg
+0220_x_sfx_100_v2_sfx100v2_metal_06.ogg	raw/x_sfx_100_v2/sfx100v2_metal_06.ogg
+0221_x_sfx_100_v2_sfx100v2_metal_hit_01.ogg	raw/x_sfx_100_v2/sfx100v2_metal_hit_01.ogg
+0222_x_sfx_100_v2_sfx100v2_metal_hit_02.ogg	raw/x_sfx_100_v2/sfx100v2_metal_hit_02.ogg
+0223_x_sfx_100_v2_sfx100v2_misc_01.ogg	raw/x_sfx_100_v2/sfx100v2_misc_01.ogg
+0224_x_sfx_100_v2_sfx100v2_misc_02.ogg	raw/x_sfx_100_v2/sfx100v2_misc_02.ogg
+0225_x_sfx_100_v2_sfx100v2_misc_03.ogg	raw/x_sfx_100_v2/sfx100v2_misc_03.ogg
+0226_x_sfx_100_v2_sfx100v2_misc_04.ogg	raw/x_sfx_100_v2/sfx100v2_misc_04.ogg
+0227_x_sfx_100_v2_sfx100v2_misc_05.ogg	raw/x_sfx_100_v2/sfx100v2_misc_05.ogg
+0228_x_sfx_100_v2_sfx100v2_misc_06.ogg	raw/x_sfx_100_v2/sfx100v2_misc_06.ogg
+0229_x_sfx_100_v2_sfx100v2_misc_07.ogg	raw/x_sfx_100_v2/sfx100v2_misc_07.ogg
+0230_x_sfx_100_v2_sfx100v2_misc_08.ogg	raw/x_sfx_100_v2/sfx100v2_misc_08.ogg
+0231_x_sfx_100_v2_sfx100v2_misc_09.ogg	raw/x_sfx_100_v2/sfx100v2_misc_09.ogg
+0232_x_sfx_100_v2_sfx100v2_misc_10.ogg	raw/x_sfx_100_v2/sfx100v2_misc_10.ogg
+0233_x_sfx_100_v2_sfx100v2_misc_11.ogg	raw/x_sfx_100_v2/sfx100v2_misc_11.ogg
+0234_x_sfx_100_v2_sfx100v2_misc_12.ogg	raw/x_sfx_100_v2/sfx100v2_misc_12.ogg
+0235_x_sfx_100_v2_sfx100v2_misc_13.ogg	raw/x_sfx_100_v2/sfx100v2_misc_13.ogg
+0236_x_sfx_100_v2_sfx100v2_misc_14.ogg	raw/x_sfx_100_v2/sfx100v2_misc_14.ogg
+0237_x_sfx_100_v2_sfx100v2_misc_15.ogg	raw/x_sfx_100_v2/sfx100v2_misc_15.ogg
+0238_x_sfx_100_v2_sfx100v2_misc_16.ogg	raw/x_sfx_100_v2/sfx100v2_misc_16.ogg
+0239_x_sfx_100_v2_sfx100v2_misc_17.ogg	raw/x_sfx_100_v2/sfx100v2_misc_17.ogg
+0240_x_sfx_100_v2_sfx100v2_misc_18.ogg	raw/x_sfx_100_v2/sfx100v2_misc_18.ogg
+0241_x_sfx_100_v2_sfx100v2_misc_19.ogg	raw/x_sfx_100_v2/sfx100v2_misc_19.ogg
+0242_x_sfx_100_v2_sfx100v2_misc_20.ogg	raw/x_sfx_100_v2/sfx100v2_misc_20.ogg
+0243_x_sfx_100_v2_sfx100v2_misc_21.ogg	raw/x_sfx_100_v2/sfx100v2_misc_21.ogg
+0244_x_sfx_100_v2_sfx100v2_misc_22.ogg	raw/x_sfx_100_v2/sfx100v2_misc_22.ogg
+0245_x_sfx_100_v2_sfx100v2_misc_23.ogg	raw/x_sfx_100_v2/sfx100v2_misc_23.ogg
+0246_x_sfx_100_v2_sfx100v2_misc_24.ogg	raw/x_sfx_100_v2/sfx100v2_misc_24.ogg
+0247_x_sfx_100_v2_sfx100v2_misc_25.ogg	raw/x_sfx_100_v2/sfx100v2_misc_25.ogg
+0248_x_sfx_100_v2_sfx100v2_misc_26.ogg	raw/x_sfx_100_v2/sfx100v2_misc_26.ogg
+0249_x_sfx_100_v2_sfx100v2_misc_27.ogg	raw/x_sfx_100_v2/sfx100v2_misc_27.ogg
+0250_x_sfx_100_v2_sfx100v2_misc_28.ogg	raw/x_sfx_100_v2/sfx100v2_misc_28.ogg
+0251_x_sfx_100_v2_sfx100v2_misc_29.ogg	raw/x_sfx_100_v2/sfx100v2_misc_29.ogg
+0252_x_sfx_100_v2_sfx100v2_misc_30.ogg	raw/x_sfx_100_v2/sfx100v2_misc_30.ogg
+0253_x_sfx_100_v2_sfx100v2_misc_31.ogg	raw/x_sfx_100_v2/sfx100v2_misc_31.ogg
+0254_x_sfx_100_v2_sfx100v2_misc_32.ogg	raw/x_sfx_100_v2/sfx100v2_misc_32.ogg
+0255_x_sfx_100_v2_sfx100v2_misc_33.ogg	raw/x_sfx_100_v2/sfx100v2_misc_33.ogg
+0256_x_sfx_100_v2_sfx100v2_misc_34.ogg	raw/x_sfx_100_v2/sfx100v2_misc_34.ogg
+0257_x_sfx_100_v2_sfx100v2_misc_35.ogg	raw/x_sfx_100_v2/sfx100v2_misc_35.ogg
+0258_x_sfx_100_v2_sfx100v2_misc_36.ogg	raw/x_sfx_100_v2/sfx100v2_misc_36.ogg
+0259_x_sfx_100_v2_sfx100v2_misc_37.ogg	raw/x_sfx_100_v2/sfx100v2_misc_37.ogg
+0260_x_sfx_100_v2_sfx100v2_stones_01.ogg	raw/x_sfx_100_v2/sfx100v2_stones_01.ogg
+0261_x_sfx_100_v2_sfx100v2_stones_02.ogg	raw/x_sfx_100_v2/sfx100v2_stones_02.ogg
+0262_x_sfx_100_v2_sfx100v2_stones_03.ogg	raw/x_sfx_100_v2/sfx100v2_stones_03.ogg
+0263_x_sfx_100_v2_sfx100v2_switch_01.ogg	raw/x_sfx_100_v2/sfx100v2_switch_01.ogg
+0264_x_sfx_100_v2_sfx100v2_switch_02.ogg	raw/x_sfx_100_v2/sfx100v2_switch_02.ogg
+0265_x_sfx_100_v2_sfx100v2_thunder_01.ogg	raw/x_sfx_100_v2/sfx100v2_thunder_01.ogg
+0266_x_sfx_100_v2_sfx100v2_wood_01.ogg	raw/x_sfx_100_v2/sfx100v2_wood_01.ogg
+0267_x_sfx_100_v2_sfx100v2_wood_02.ogg	raw/x_sfx_100_v2/sfx100v2_wood_02.ogg
+0268_x_sfx_100_v2_sfx100v2_wood_03.ogg	raw/x_sfx_100_v2/sfx100v2_wood_03.ogg
+0269_x_sfx_100_v2_sfx100v2_wood_04.ogg	raw/x_sfx_100_v2/sfx100v2_wood_04.ogg
+0270_x_sfx_100_v2_sfx100v2_wood_hit_01.ogg	raw/x_sfx_100_v2/sfx100v2_wood_hit_01.ogg
+0271_x_sfx_100_v2_sfx100v2_wood_hit_02.ogg	raw/x_sfx_100_v2/sfx100v2_wood_hit_02.ogg
+0272_x_sfx_100_v2_sfx100v2_wood_hit_03.ogg	raw/x_sfx_100_v2/sfx100v2_wood_hit_03.ogg
+0273_x_sounds_sounds_cz.ogg	raw/x_sounds/sounds/cz.wav
+0274_x_sounds_sounds_mosin.ogg	raw/x_sounds/sounds/mosin.wav
+0275_x_sounds_sounds_shotty.ogg	raw/x_sounds/sounds/shotty.wav
+0276_x_sounds_sounds_sks.ogg	raw/x_sounds/sounds/sks.wav
