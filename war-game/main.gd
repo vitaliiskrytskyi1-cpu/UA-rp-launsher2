@@ -9,8 +9,10 @@ const Avatar = preload("res://avatar.gd")
 const TouchUI = preload("res://touch.gd")
 const Gear = preload("res://gear.gd")
 const Sfx = preload("res://sfx.gd")
+const HudMap = preload("res://hudmap.gd")
+const Inventory = preload("res://inventory.gd")
 
-const VERSION := 2
+const VERSION := 3
 const DEFAULT_ADDR := "147.185.221.217:11983"
 const DEFAULT_PORT := 7000
 const MAX_PLAYERS := 40
@@ -82,6 +84,9 @@ var shop_list: VBoxContainer
 var shop_money: Label
 var shop_info: Label
 var shop_cat := "w"
+var minimap: Control
+var bigmap: Control
+var bag: Control
 var tracer_mat: StandardMaterial3D
 var boom_mat: StandardMaterial3D
 var smoke_mat: StandardMaterial3D
@@ -174,7 +179,7 @@ func _new_pdata(nick: String, team: int, prof: Dictionary) -> Dictionary:
 		"pos": Vector3.ZERO, "yaw": 0.0, "pitch": 0.0, "mode": 0, "slot": 0,
 		"dpos": Vector3.ZERO, "dyaw": 0.0, "kills": 0, "deaths": 0,
 		"respawn": 0.0, "drone_t": 0.0, "last_fire": 0, "last_heavy": 0,
-		"in_mag": 0, "mags": 0, "drones": 0, "heavy": 0,
+		"in_mag": 0, "mags": 0, "drones": 0, "heavy": 0, "crouch": false,
 	}
 
 
@@ -299,7 +304,8 @@ func srv_state(pos: Vector3, yaw: float, pitch: float, mode: int, dpos: Vector3,
 		p.pos = pos
 	p.yaw = yaw
 	p.pitch = pitch
-	if p.mode == 1 and mode == 1:
+	p.crouch = (mode & 2) != 0
+	if p.mode == 1 and (mode & 1) == 1:
 		if p.dpos.distance_to(dpos) < 40.0:
 			p.dpos = dpos
 		p.dyaw = dyaw
@@ -598,8 +604,9 @@ func _process_shot(id: int, origin: Vector3, dir: Vector3) -> void:
 		if not e.alive or e.team == p.team:
 			continue
 		var parts := [[Vector3(0.0, 1.7, 0.0), 0.2, 0], [Vector3(0.0, 1.3, 0.0), 0.32, 1], [Vector3(0.0, 0.95, 0.0), 0.3, 1], [Vector3(0.0, 0.45, 0.0), 0.3, 2]]
+		var hk := 0.66 if e.crouch else 1.0
 		for part in parts:
-			var d := _ray_sphere(origin, dir, e.pos + part[0], part[1])
+			var d := _ray_sphere(origin, dir, e.pos + part[0] * hk, part[1])
 			if d >= 0.0 and d < best_d:
 				best_d = d
 				target = pid
@@ -785,7 +792,8 @@ func _send_snapshot() -> void:
 		if not p.alive:
 			continue
 		ids.append(pid)
-		var vals := [p.pos.x, p.pos.y, p.pos.z, p.yaw, p.pitch, float(p.mode), p.dpos.x, p.dpos.y, p.dpos.z, p.dyaw, float(p.slot)]
+		var m := int(p.mode) | (2 if p.crouch else 0)
+		var vals := [p.pos.x, p.pos.y, p.pos.z, p.yaw, p.pitch, float(m), p.dpos.x, p.dpos.y, p.dpos.z, p.dyaw, float(p.slot)]
 		for v in vals:
 			data.append(v)
 	if ids.size() > 0:
@@ -1110,7 +1118,9 @@ func cl_snapshot(ids: PackedInt32Array, data: PackedFloat32Array) -> void:
 			a.target_yaw = data[b + 3]
 			a.visible = true
 		var mode := int(data[b + 5])
-		if mode == 1:
+		if avatars.has(id):
+			avatars[id].model.set_pose((mode & 2) != 0, false)
+		if (mode & 1) == 1:
 			var dpos := Vector3(data[b + 6], data[b + 7], data[b + 8])
 			if not remote_drones.has(id) and players.has(id):
 				var d := make_drone(players[id].team)
@@ -1442,6 +1452,18 @@ func _process(delta: float) -> void:
 	if touch and touch.shop_pressed:
 		touch.shop_pressed = false
 		_open_shop()
+	if touch and touch.bag_pressed:
+		touch.bag_pressed = false
+		if bag:
+			bag.show()
+			touch.hide()
+			touch.reset_input()
+	if touch and touch.map_pressed:
+		touch.map_pressed = false
+		if bigmap:
+			bigmap.show()
+			touch.hide()
+			touch.reset_input()
 	if hud == null or not hud.visible:
 		return
 	_update_hud(delta)
@@ -1494,7 +1516,10 @@ func _update_hud(delta: float) -> void:
 		else:
 			ammo_lbl.text = "Зброю сховано"
 		if touch:
-			touch.drone_label = "ДРОН ×%d" % soldier.drones
+			var bd := {"drone": soldier.drones, "reload": soldier.mags}
+			if soldier.slot == 1:
+				bd["slot"] = soldier.heavy_ammo
+			touch.badges = bd
 	else:
 		ammo_lbl.text = ""
 	score_lbl.text = "%s  %d   :   %d  %s" % [TEAM_NAMES[0], tickets[0], tickets[1], TEAM_NAMES[1]]
@@ -1554,7 +1579,7 @@ func _build_ui() -> void:
 	money_lbl.add_theme_color_override("font_color", Color(0.5, 1.0, 0.55))
 	_place(money_lbl, Vector4(0, 0, 0, 0), Vector4(24, 60, 300, 96))
 	feed_lbl = _label(hud, 18, HORIZONTAL_ALIGNMENT_RIGHT)
-	_place(feed_lbl, Vector4(1, 0, 1, 0), Vector4(-430, 16, -20, 180))
+	_place(feed_lbl, Vector4(1, 0, 1, 0), Vector4(-430, 240, -20, 400))
 	ammo_lbl = _label(hud, 26, HORIZONTAL_ALIGNMENT_CENTER)
 	_place(ammo_lbl, Vector4(0.5, 1, 0.5, 1), Vector4(-360, -64, 360, -20))
 	center_lbl = _label(hud, 28, HORIZONTAL_ALIGNMENT_CENTER)
@@ -1565,10 +1590,23 @@ func _build_ui() -> void:
 	_place(cross, Vector4(0.5, 0.5, 0.5, 0.5), Vector4(-20, -26, 20, 22))
 	hud.hide()
 
+	minimap = HudMap.new()
+	hud.add_child(minimap)
+	minimap.setup(self, false)
+
 	# ---------------- сенсорне керування
 	touch = TouchUI.new()
 	ui.add_child(touch)
 	touch.hide()
+
+	bigmap = HudMap.new()
+	ui.add_child(bigmap)
+	bigmap.setup(self, true)
+	bigmap.hide()
+	bag = Inventory.new()
+	ui.add_child(bag)
+	bag.setup(self)
+	bag.hide()
 
 	_build_shop()
 
@@ -1720,6 +1758,16 @@ func _build_shop() -> void:
 	shop_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	shop_list.add_theme_constant_override("separation", 6)
 	scroll.add_child(shop_list)
+
+
+func on_map_closed() -> void:
+	if hud.visible:
+		touch.show()
+
+
+func on_bag_closed() -> void:
+	if hud.visible:
+		touch.show()
 
 
 func _set_cat(key: String) -> void:

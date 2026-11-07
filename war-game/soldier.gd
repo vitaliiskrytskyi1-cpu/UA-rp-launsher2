@@ -35,6 +35,9 @@ var heavy_ammo := 0
 var speed_mult := 1.0
 var slot := 0
 var aiming := false
+var crouching := false
+var col_shape: CollisionShape3D
+var capsule: CapsuleShape3D
 var reloading := 0.0
 var fire_cd := 0.0
 var heavy_cd := 0.0
@@ -71,13 +74,13 @@ func setup(m, t, is_bot: bool) -> void:
 	bot = is_bot
 	collision_layer = 2
 	collision_mask = 1
-	var col := CollisionShape3D.new()
-	var cap := CapsuleShape3D.new()
-	cap.radius = 0.35
-	cap.height = 1.75
-	col.shape = cap
-	col.position.y = 0.875
-	add_child(col)
+	col_shape = CollisionShape3D.new()
+	capsule = CapsuleShape3D.new()
+	capsule.radius = 0.35
+	capsule.height = 1.75
+	col_shape.shape = capsule
+	col_shape.position.y = 0.875
+	add_child(col_shape)
 
 	model = Character.new()
 	add_child(model)
@@ -121,17 +124,29 @@ func _recalc_weight() -> void:
 
 
 func _update_labels() -> void:
+	if model:
+		model.set_pose(crouching, aiming)
 	if touch == null:
 		return
 	match slot:
-		0: touch.slot_label = "АВТОМАТ"
-		1: touch.slot_label = "РПГ" if eq.x == "rpg" else "МІНОМЕТ"
-		2: touch.slot_label = "СХОВАНО"
-	match slot:
-		0: touch.fire_label = "ВОГОНЬ"
-		1: touch.fire_label = "ПОСТРІЛ"
-		2: touch.fire_label = "—"
+		0: touch.slot_icon = "rifle"
+		1: touch.slot_icon = "rpg" if eq.x == "rpg" else "mortar"
+		2: touch.slot_icon = "hands"
 	touch.aiming = aiming
+	touch.crouching = crouching
+
+
+func set_crouch(on: bool) -> void:
+	if not on and crouching:
+		# чи є місце, щоб встати
+		var q := PhysicsRayQueryParameters3D.create(global_position + Vector3(0.0, 1.0, 0.0), global_position + Vector3(0.0, 1.85, 0.0))
+		q.collision_mask = 1
+		if not get_world_3d().direct_space_state.intersect_ray(q).is_empty():
+			return
+	crouching = on
+	capsule.height = 1.15 if crouching else 1.75
+	col_shape.position.y = capsule.height * 0.5
+	_update_labels()
 
 
 func respawn(pos: Vector3, yaw_rad: float) -> void:
@@ -144,6 +159,9 @@ func respawn(pos: Vector3, yaw_rad: float) -> void:
 	head.rotation_degrees.x = 0.0
 	reloading = 0.0
 	slot = 0
+	crouching = false
+	capsule.height = 1.75
+	col_shape.position.y = 0.875
 	set_aim(false)
 	cam.current = true
 	model.visible = true
@@ -218,6 +236,7 @@ func _physics_process(delta: float) -> void:
 	var want_aim := false
 	var want_slot := false
 	var want_speed := false
+	var want_crouch := false
 
 	if bot:
 		bot_age += delta
@@ -261,6 +280,8 @@ func _physics_process(delta: float) -> void:
 			want_aim = touch.aim_pressed
 			want_slot = touch.slot_pressed
 			want_speed = touch.speed_pressed
+			want_crouch = touch.crouch_pressed
+			touch.crouch_pressed = false
 			touch.jump_pressed = false
 			touch.reload_pressed = false
 			touch.drone_pressed = false
@@ -289,12 +310,13 @@ func _physics_process(delta: float) -> void:
 		want_slot = want_slot or _take_key(KEY_Q)
 		want_speed = want_speed or _take_key(KEY_SHIFT)
 		want_aim = want_aim or _take_key("aim")
+		want_crouch = want_crouch or _take_key(KEY_C)
 
 	if drone_active:
 		if want_speed:
 			drone_speed_mode = (drone_speed_mode + 1) % DRONE_SPEEDS.size()
 			if touch:
-				touch.speed_label = "ШВ %d" % (drone_speed_mode + 1)
+				touch.speed_level = drone_speed_mode + 1
 		_drone_process(delta, mv, look, up, down, want_boom)
 		velocity.x = 0.0
 		velocity.z = 0.0
@@ -309,6 +331,8 @@ func _physics_process(delta: float) -> void:
 			switch_slot()
 		if want_aim:
 			set_aim(not aiming)
+		if want_crouch:
+			set_crouch(not crouching)
 		_soldier_process(delta, mv, look, firing, jump, reload)
 
 	send_t -= delta
@@ -319,11 +343,12 @@ func _physics_process(delta: float) -> void:
 		if drone_active and drone_node:
 			dpos = drone_node.global_position
 			dyaw = deg_to_rad(drone_yaw)
-		main.send_state(global_position, rotation.y, head.rotation.x, 1 if drone_active else 0, dpos, dyaw)
+		var mode := (1 if drone_active else 0) | (2 if crouching else 0)
+		main.send_state(global_position, rotation.y, head.rotation.x, mode, dpos, dyaw)
 
 
 func eye_pos() -> Vector3:
-	return global_position + Vector3(0.0, 1.55, 0.0)
+	return global_position + Vector3(0.0, head.position.y, 0.0)
 
 
 func _aim_point(maxd: float = 500.0) -> Vector3:
@@ -346,7 +371,8 @@ func _soldier_process(delta: float, mv: Vector2, look: Vector2, firing: bool, ju
 	rotation_degrees.y = yaw
 	head.rotation_degrees.x = pitch
 
-	var spd := BASE_SPEED * speed_mult * (0.55 if aiming else 1.0)
+	head.position.y = move_toward(head.position.y, 1.05 if crouching else 1.55, delta * 3.0)
+	var spd := BASE_SPEED * speed_mult * (0.55 if aiming else 1.0) * (0.5 if crouching else 1.0)
 	var dir := transform.basis * Vector3(mv.x, 0.0, mv.y)
 	dir.y = 0.0
 	if dir.length() > 1.0:
@@ -354,7 +380,9 @@ func _soldier_process(delta: float, mv: Vector2, look: Vector2, firing: bool, ju
 	velocity.x = dir.x * spd
 	velocity.z = dir.z * spd
 	if is_on_floor():
-		if jump:
+		if jump and crouching:
+			set_crouch(false)
+		elif jump:
 			velocity.y = JUMP * clampf(speed_mult, 0.75, 1.0)
 	else:
 		velocity.y -= GRAV * delta
@@ -399,7 +427,7 @@ func _soldier_process(delta: float, mv: Vector2, look: Vector2, firing: bool, ju
 				in_mag -= 1
 				var eye := eye_pos()
 				var target := _aim_point()
-				var spread_k := float(wdata.spread) * (0.4 if aiming else 1.0) * (1.6 if hs > 1.0 else 1.0)
+				var spread_k := float(wdata.spread) * (0.4 if aiming else 1.0) * (1.6 if hs > 1.0 else 1.0) * (0.6 if crouching else 1.0)
 				var spread := Vector3(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * spread_k
 				var d := ((target - eye).normalized() + spread).normalized()
 				main.local_fire(eye, d, global_position + transform.basis * Vector3(0.12, 1.25, -0.9))
@@ -464,7 +492,7 @@ func start_drone(pos: Vector3) -> void:
 		drone_sound.play()
 	if touch:
 		touch.drone_mode = true
-		touch.speed_label = "ШВ %d" % (drone_speed_mode + 1)
+		touch.speed_level = drone_speed_mode + 1
 		touch.reset_input()
 
 

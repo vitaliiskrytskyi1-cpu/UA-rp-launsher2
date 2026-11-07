@@ -341,6 +341,73 @@ static func build(parent: Node, visuals: bool) -> Node3D:
 			for k in 3:
 				_vis_box(w, Vector3(1.2, 0.6, 0.6), Vector3(-6.0 + k * 1.4, 0.3, bz + s * 6.0), tex_mat("", Color(0.3, 0.34, 0.22)))
 
+	# ---------------------------------------------------------------- загородження: колючий дріт і протитанкові «їжаки»
+	var m_metal := tex_mat("", Color(0.22, 0.2, 0.18))
+	var m_rust := tex_mat("", Color(0.27, 0.19, 0.14))
+	var beam_xf: Array = []
+	var post_xf2: Array = []
+	for tz in TRENCH_Z:
+		var toward: float = -signf(tz)
+		var hz: float = tz + toward * 9.0
+		var hx := -132.0
+		while hx <= 132.0:
+			if fposmod(hx + 120.0, 40.0) > 4.0:
+				_col_box(w, Vector3(1.1, 0.9, 1.1), Vector3(hx, 0.45, hz))
+				for k in 3:
+					var bb := Basis(Vector3.UP, k * TAU / 3.0) * Basis(Vector3.RIGHT, 0.95)
+					beam_xf.append(Transform3D(bb, Vector3(hx, 0.55, hz)))
+			hx += 11.0
+		var wz: float = tz + toward * 5.5
+		var wx := -138.0
+		while wx <= 138.0:
+			post_xf2.append(Transform3D(Basis(), Vector3(wx, 0.45, wz)))
+			wx += 3.0
+		if visuals:
+			for hh in [0.3, 0.6, 0.85]:
+				var wire := _vis_box(w, Vector3(276.0, 0.015, 0.015), Vector3(0.0, hh, wz), m_metal)
+				wire.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	if visuals:
+		var beam := BoxMesh.new()
+		beam.size = Vector3(0.12, 1.5, 0.12)
+		_multi(w, beam, m_rust, beam_xf)
+		var post := CylinderMesh.new()
+		post.top_radius = 0.035
+		post.bottom_radius = 0.04
+		post.height = 0.9
+		post.radial_segments = 5
+		_multi(w, post, m_plank, post_xf2)
+
+	# ---------------------------------------------------------------- підбита техніка (укриття)
+	var wrecks := [[Vector3(40.0, 0.0, -60.0), 0.3, true], [Vector3(-70.0, 0.0, -28.0), -0.6, false], [Vector3(-40.0, 0.0, 60.0), 0.3, true], [Vector3(70.0, 0.0, 28.0), -0.6, false]]
+	for wr in wrecks:
+		var wn := Node3D.new()
+		wn.position = wr[0]
+		wn.rotation.y = wr[1]
+		w.add_child(wn)
+		if wr[2]:
+			_box(wn, Vector3(3.4, 1.2, 6.6), Vector3(0.0, 0.75, 0.0), m_rust, visuals)  # корпус танка
+			_box(wn, Vector3(2.2, 0.75, 2.6), Vector3(0.0, 1.7, 0.4), m_rust, visuals, Vector3(0.0, 0.5, 0.0))  # башта
+			if visuals:
+				var gun := MeshInstance3D.new()
+				var gm := CylinderMesh.new()
+				gm.top_radius = 0.09
+				gm.bottom_radius = 0.11
+				gm.height = 4.2
+				gun.mesh = gm
+				gun.material_override = m_metal
+				gun.position = Vector3(1.2, 1.6, -1.4)
+				gun.rotation = Vector3(PI * 0.5 - 0.15, 0.5, 0.0)
+				wn.add_child(gun)
+				for s in [-1.0, 1.0]:
+					_vis_box(wn, Vector3(0.6, 0.7, 6.8), Vector3(s * 1.55, 0.35, 0.0), m_metal)  # гусениці
+		else:
+			_box(wn, Vector3(2.8, 1.6, 7.4), Vector3(0.0, 1.2, 0.0), m_rust, visuals)  # БТР
+			_box(wn, Vector3(1.0, 0.5, 1.2), Vector3(0.0, 2.2, -1.0), m_rust, visuals)
+			if visuals:
+				for zz in [-2.6, -0.9, 0.9, 2.6]:
+					for s in [-1.0, 1.0]:
+						_vis_box(wn, Vector3(0.35, 1.0, 1.0), Vector3(s * 1.45, 0.5, zz), m_metal)
+
 	# ---------------------------------------------------------------- центральна точка захоплення
 	for k in 10:
 		if k % 3 == 2:
@@ -379,7 +446,87 @@ static func build(parent: Node, visuals: bool) -> Node3D:
 		crm.height = 0.02
 		crm.radial_segments = 12
 		_multi(w, crm, m_mud, crater_xf)
+		_grass(w)
 	return w
+
+
+static func _grass_texture() -> ImageTexture:
+	var img := Image.create(64, 64, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var r := RandomNumberGenerator.new()
+	r.seed = 99
+	for b in 22:
+		var x0 := r.randf_range(4.0, 60.0)
+		var lean := r.randf_range(-12.0, 12.0)
+		var h := r.randf_range(26.0, 62.0)
+		var col := Color(r.randf_range(0.25, 0.45), r.randf_range(0.38, 0.55), r.randf_range(0.12, 0.22))
+		if r.randf() < 0.25:
+			col = Color(0.55, 0.5, 0.3)  # суха трава
+		for i in int(h):
+			var t := float(i) / h
+			var x := int(x0 + lean * t * t)
+			var y := 63 - i
+			var wdt := 2 if t < 0.6 else 1
+			for dx in wdt:
+				var px := clampi(x + dx, 0, 63)
+				img.set_pixel(px, y, col.darkened(0.25 * (1.0 - t)))
+	img.generate_mipmaps()
+	return ImageTexture.create_from_image(img)
+
+
+static func _grass(w: Node3D) -> void:
+	var gm := StandardMaterial3D.new()
+	gm.albedo_texture = _grass_texture()
+	gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	gm.alpha_scissor_threshold = 0.4
+	gm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	gm.roughness = 1.0
+	gm.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	var qm := QuadMesh.new()
+	qm.size = Vector2(1.1, 0.65)
+	qm.center_offset = Vector3(0.0, 0.32, 0.0)
+	var r := RandomNumberGenerator.new()
+	r.seed = 4242
+	var chunk := 25.0
+	var cx := -HALF
+	while cx < HALF:
+		var cz := -HALF
+		while cz < HALF:
+			var xf: Array = []
+			var center := Vector3(cx + chunk * 0.5, 0.0, cz + chunk * 0.5)
+			for i in 70:
+				var p := Vector3(cx + r.randf() * chunk, 0.0, cz + r.randf() * chunk)
+				var ok := true
+				for tz in TRENCH_Z:
+					if absf(p.z - tz) < 2.0:
+						ok = false
+				if absf(absf(p.z) - BASE_Z) < 16.0 and absf(p.x) < 36.0:
+					ok = false
+				if not ok:
+					continue
+				var rot := r.randf() * PI
+				var sc := r.randf_range(0.7, 1.4)
+				var b := Basis(Vector3.UP, rot).scaled(Vector3(sc, sc, sc))
+				xf.append(Transform3D(b, p - center))
+				xf.append(Transform3D(Basis(Vector3.UP, rot + PI * 0.5).scaled(Vector3(sc, sc, sc)), p - center))
+			if not xf.is_empty():
+				var mm := MultiMesh.new()
+				mm.transform_format = MultiMesh.TRANSFORM_3D
+				mm.mesh = qm
+				mm.instance_count = xf.size()
+				for i in xf.size():
+					mm.set_instance_transform(i, xf[i])
+				var mmi := MultiMeshInstance3D.new()
+				mmi.multimesh = mm
+				mmi.material_override = gm
+				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				mmi.visibility_range_end = 55.0
+				mmi.visibility_range_end_margin = 8.0
+				mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
+				mmi.position = center
+				w.add_child(mmi)
+			cz += chunk
+		cx += chunk
 
 
 static func _house(w: Node3D, c: Vector3, rot: float, ruin: float, roof: bool, m_wall: Material, m_roof: Material, visuals: bool) -> void:

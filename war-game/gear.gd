@@ -75,8 +75,9 @@ static func catalog(cat: String) -> Dictionary:
 static func new_profile() -> Dictionary:
 	return {
 		"money": START_MONEY,
-		"owned": ["w:aks74u", "a:none", "h:none", "r:none", "p:none", "x:none"],
-		"eq": {"w": "aks74u", "a": "none", "h": "none", "r": "none", "p": "none", "x": "none"},
+		"owned": ["w:aks74u", "a:none", "h:none", "r:none", "p:none", "x:none", "a:a2", "p:s"],
+		"eq": {"w": "aks74u", "a": "a2", "h": "none", "r": "none", "p": "s", "x": "none"},
+		"kit3": true,
 		"fpv": 1,
 		"mags": {"aks74u": 6},
 		"heavy_ammo": {"rpg": 0, "mortar": 0},
@@ -88,6 +89,16 @@ static func fix_profile(p: Dictionary) -> Dictionary:
 	for k in d:
 		if not p.has(k):
 			p[k] = d[k]
+	# стартовий набір для старих профілів: мінімальна броня і малий рюкзак
+	if not p.has("kit3"):
+		p["kit3"] = true
+		for tag in ["a:a2", "p:s"]:
+			if not p.owned.has(tag):
+				p.owned.append(tag)
+		if p.eq.get("a", "none") == "none":
+			p.eq["a"] = "a2"
+		if p.eq.get("p", "none") == "none":
+			p.eq["p"] = "s"
 	if not p.has("heavy_ammo") or typeof(p.heavy_ammo) != TYPE_DICTIONARY:
 		p.heavy_ammo = {"rpg": 0, "mortar": 0}
 	for c in ["w", "a", "h", "r", "p", "x"]:

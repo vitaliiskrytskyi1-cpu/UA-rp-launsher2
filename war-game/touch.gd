@@ -1,9 +1,8 @@
 extends Control
-## Сенсорне керування з мультитачем.
+## Сенсорне керування зі значками і мультитачем.
 ## Ліва частина екрана — джойстик руху, права — огляд.
-## Режим солдата: ВОГОНЬ, ПРИЦІЛ, СТРИБОК, R (перезарядка), ЗБРОЯ, ДРОН, МАГАЗИН.
-## Режим дрона: ВИБУХ, ВГОРУ, ВНИЗ, ШВИДКІСТЬ.
 
+const Icons = preload("res://icons.gd")
 const JOY_R := 110.0
 
 var move := Vector2.ZERO
@@ -19,21 +18,24 @@ var aim_pressed := false
 var slot_pressed := false
 var speed_pressed := false
 var shop_pressed := false
+var bag_pressed := false
+var crouch_pressed := false
+var map_pressed := false
 
 var drone_mode := false
-var drone_label := "ДРОН"
-var slot_label := "ЗБРОЯ"
-var speed_label := "ШВ 1"
-var fire_label := "ВОГОНЬ"
 var aiming := false
+var crouching := false
+var slot_icon := "rifle"
+var badges := {}      # кнопка -> число на значку
+var speed_level := 2
 
 var _joy_index := -1
 var _joy_center := Vector2.ZERO
 var _joy_pos := Vector2.ZERO
 var _look_index := -1
 var _look_last := Vector2.ZERO
-var _held := {}      # індекс дотику -> назва кнопки
-var _held_last := {} # індекс дотику -> остання позиція (для огляду під час стрільби)
+var _held := {}
+var _held_last := {}
 
 
 func _ready() -> void:
@@ -44,25 +46,27 @@ func _ready() -> void:
 func _buttons() -> Dictionary:
 	var s := get_viewport_rect().size
 	var u := minf(s.x, s.y) / 720.0
-	var red := Color(0.9, 0.25, 0.2)
-	var white := Color(0.9, 0.9, 0.9)
+	var red := Color(0.92, 0.28, 0.22)
+	var white := Color(0.92, 0.92, 0.92)
 	var yellow := Color(1.0, 0.8, 0.15)
+	var green := Color(0.45, 0.9, 0.5)
 	if drone_mode:
 		return {
-			"boom": [Vector2(s.x - 150.0 * u, s.y - 180.0 * u), 88.0 * u, "ВИБУХ", red],
-			"up": [Vector2(s.x - 330.0 * u, s.y - 290.0 * u), 62.0 * u, "ВГОРУ", white],
-			"down": [Vector2(s.x - 330.0 * u, s.y - 110.0 * u), 62.0 * u, "ВНИЗ", white],
-			"speed": [Vector2(s.x - 150.0 * u, s.y - 375.0 * u), 54.0 * u, speed_label, yellow],
+			"boom": [Vector2(s.x - 150.0 * u, s.y - 180.0 * u), 88.0 * u, "boom", red],
+			"up": [Vector2(s.x - 320.0 * u, s.y - 285.0 * u), 62.0 * u, "up", white],
+			"down": [Vector2(s.x - 320.0 * u, s.y - 105.0 * u), 62.0 * u, "down", white],
+			"speed": [Vector2(s.x - 150.0 * u, s.y - 375.0 * u), 54.0 * u, "speed", yellow],
 		}
-	var aim_col := yellow if aiming else white
 	return {
-		"fire": [Vector2(s.x - 150.0 * u, s.y - 180.0 * u), 88.0 * u, fire_label, red],
-		"aim": [Vector2(s.x - 150.0 * u, s.y - 375.0 * u), 52.0 * u, "ПРИЦІЛ", aim_col],
-		"jump": [Vector2(s.x - 330.0 * u, s.y - 105.0 * u), 54.0 * u, "СТРИБОК", white],
-		"drone": [Vector2(s.x - 330.0 * u, s.y - 285.0 * u), 58.0 * u, drone_label, yellow],
-		"reload": [Vector2(s.x - 490.0 * u, s.y - 100.0 * u), 46.0 * u, "R", white],
-		"slot": [Vector2(s.x - 490.0 * u, s.y - 245.0 * u), 50.0 * u, slot_label, white],
-		"shop": [Vector2(95.0 * u, 165.0 * u), 50.0 * u, "МАГАЗИН", yellow],
+		"fire": [Vector2(s.x - 150.0 * u, s.y - 180.0 * u), 88.0 * u, "fire", red],
+		"aim": [Vector2(s.x - 150.0 * u, s.y - 375.0 * u), 52.0 * u, "aim", yellow if aiming else white],
+		"jump": [Vector2(s.x - 315.0 * u, s.y - 92.0 * u), 50.0 * u, "jump", white],
+		"crouch": [Vector2(s.x - 450.0 * u, s.y - 92.0 * u), 50.0 * u, "stand" if crouching else "crouch", yellow if crouching else white],
+		"reload": [Vector2(s.x - 315.0 * u, s.y - 228.0 * u), 48.0 * u, "reload", white],
+		"slot": [Vector2(s.x - 450.0 * u, s.y - 228.0 * u), 48.0 * u, slot_icon, white],
+		"drone": [Vector2(s.x - 300.0 * u, s.y - 370.0 * u), 54.0 * u, "drone", yellow],
+		"shop": [Vector2(70.0 * u, 160.0 * u), 44.0 * u, "shop", green],
+		"bag": [Vector2(70.0 * u, 265.0 * u), 44.0 * u, "bag", white],
 	}
 
 
@@ -73,6 +77,10 @@ func _hit_button(p: Vector2) -> String:
 		var r: float = b[k][1]
 		if p.distance_to(c) <= r * 1.1:
 			return k
+	# міні-карта у верхньому правому куті
+	var s := get_viewport_rect().size
+	if not drone_mode and Rect2(s.x - 230.0, 8.0, 222.0, 222.0).has_point(p):
+		return "map"
 	return ""
 
 
@@ -115,6 +123,9 @@ func _input(event: InputEvent) -> void:
 				"slot": slot_pressed = true
 				"speed": speed_pressed = true
 				"shop": shop_pressed = true
+				"bag": bag_pressed = true
+				"crouch": crouch_pressed = true
+				"map": map_pressed = true
 				_:
 					if p.x < get_viewport_rect().size.x * 0.42 and _joy_index == -1:
 						_joy_index = event.index
@@ -132,7 +143,6 @@ func _input(event: InputEvent) -> void:
 			_held.erase(event.index)
 			_held_last.erase(event.index)
 		_update_held()
-		queue_redraw()
 	elif event is InputEventScreenDrag:
 		var p: Vector2 = event.position
 		if event.index == _joy_index:
@@ -145,7 +155,6 @@ func _input(event: InputEvent) -> void:
 			look_delta += p - _look_last
 			_look_last = p
 		elif _held.has(event.index) and _held[event.index] == "fire":
-			# можна водити прицілом, тримаючи вогонь
 			look_delta += p - _held_last[event.index]
 			_held_last[event.index] = p
 
@@ -165,15 +174,28 @@ func _draw() -> void:
 	for k in b:
 		var c: Vector2 = b[k][0]
 		var r: float = b[k][1]
-		var lbl: String = b[k][2]
+		var icon: String = b[k][2]
 		var col: Color = b[k][3]
-		var a := 0.28
+		var a := 0.22
 		if held.has(k):
-			a = 0.6
+			a = 0.55
+		draw_circle(c, r, Color(0.05, 0.05, 0.05, 0.35))
 		draw_circle(c, r, Color(col.r, col.g, col.b, a))
-		draw_arc(c, r, 0.0, TAU, 40, Color(col.r, col.g, col.b, 0.85), 2.5)
-		var fs := int(clampf(r * 0.3, 12.0, 30.0))
-		draw_string(font, c + Vector2(-r, fs * 0.35), lbl, HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, fs, Color(1, 1, 1, 0.95))
+		draw_arc(c, r, 0.0, TAU, 40, Color(col.r, col.g, col.b, 0.9), 2.5)
+		Icons.draw(self, icon, c, r * 0.95, Color(1, 1, 1, 0.95))
+		if badges.has(k):
+			var bc := c + Vector2(r * 0.72, -r * 0.72)
+			var br := maxf(13.0, r * 0.3)
+			draw_circle(bc, br, Color(0.1, 0.1, 0.1, 0.9))
+			draw_arc(bc, br, 0.0, TAU, 20, col, 2.0)
+			var fs := int(br * 1.1)
+			draw_string(font, bc + Vector2(-br, fs * 0.36), str(badges[k]), HORIZONTAL_ALIGNMENT_CENTER, br * 2.0, fs, Color(1, 1, 1))
+	if drone_mode and b.has("speed"):
+		var c: Vector2 = b["speed"][0]
+		var r: float = b["speed"][1]
+		for i in 3:
+			var on := i < speed_level
+			draw_rect(Rect2(c + Vector2(-r * 0.45 + i * r * 0.32, r * 1.15), Vector2(r * 0.24, r * 0.16)), Color(1, 0.8, 0.15, 0.95 if on else 0.25))
 
 
 func _process(_delta: float) -> void:
