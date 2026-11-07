@@ -1,0 +1,149 @@
+extends Control
+## Сенсорне керування з мультитачем:
+## ліва частина екрана — джойстик руху, права — огляд,
+## кнопки: ВОГОНЬ, СТРИБОК, ПЕРЕЗАРЯДКА, ДРОН / ВИБУХ.
+
+const JOY_R := 110.0
+
+var move := Vector2.ZERO
+var look_delta := Vector2.ZERO
+var fire := false
+var jump_pressed := false
+var reload_pressed := false
+var drone_pressed := false
+var boom_pressed := false
+var drone_mode := false
+var drone_label := "ДРОН"
+
+var _joy_index := -1
+var _joy_center := Vector2.ZERO
+var _joy_pos := Vector2.ZERO
+var _look_index := -1
+var _look_last := Vector2.ZERO
+var _fire_index := -1
+var _fire_last := Vector2.ZERO
+
+
+func _ready() -> void:
+	set_anchors_preset(Control.PRESET_FULL_RECT)
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+
+func _buttons() -> Dictionary:
+	var s := get_viewport_rect().size
+	var u := minf(s.x, s.y) / 720.0
+	var fire_lbl := "ВОГОНЬ"
+	var drone_lbl := drone_label
+	if drone_mode:
+		fire_lbl = "—"
+		drone_lbl = "ВИБУХ"
+	return {
+		"fire": [Vector2(s.x - 150.0 * u, s.y - 180.0 * u), 88.0 * u, fire_lbl, Color(0.9, 0.25, 0.2)],
+		"jump": [Vector2(s.x - 330.0 * u, s.y - 105.0 * u), 56.0 * u, "СТРИБОК", Color(0.9, 0.9, 0.9)],
+		"reload": [Vector2(s.x - 150.0 * u, s.y - 375.0 * u), 52.0 * u, "R", Color(0.9, 0.9, 0.9)],
+		"drone": [Vector2(s.x - 330.0 * u, s.y - 290.0 * u), 62.0 * u, drone_lbl, Color(1.0, 0.8, 0.15)],
+	}
+
+
+func _hit_button(p: Vector2) -> String:
+	var b := _buttons()
+	for k in b:
+		var c: Vector2 = b[k][0]
+		var r: float = b[k][1]
+		if p.distance_to(c) <= r * 1.1:
+			return k
+	return ""
+
+
+func reset_input() -> void:
+	_joy_index = -1
+	_look_index = -1
+	_fire_index = -1
+	move = Vector2.ZERO
+	fire = false
+	look_delta = Vector2.ZERO
+	queue_redraw()
+
+
+func _input(event: InputEvent) -> void:
+	if not visible:
+		return
+	if event is InputEventScreenTouch:
+		var p: Vector2 = event.position
+		if event.pressed:
+			var b := _hit_button(p)
+			if b == "fire":
+				_fire_index = event.index
+				_fire_last = p
+				fire = true
+			elif b == "jump":
+				jump_pressed = true
+			elif b == "reload":
+				reload_pressed = true
+			elif b == "drone":
+				if drone_mode:
+					boom_pressed = true
+				else:
+					drone_pressed = true
+			elif p.x < get_viewport_rect().size.x * 0.42 and _joy_index == -1:
+				_joy_index = event.index
+				_joy_center = p
+				_joy_pos = p
+			elif _look_index == -1:
+				_look_index = event.index
+				_look_last = p
+		else:
+			if event.index == _joy_index:
+				_joy_index = -1
+				move = Vector2.ZERO
+			if event.index == _look_index:
+				_look_index = -1
+			if event.index == _fire_index:
+				_fire_index = -1
+				fire = false
+		queue_redraw()
+	elif event is InputEventScreenDrag:
+		var p: Vector2 = event.position
+		if event.index == _joy_index:
+			_joy_pos = p
+			var v := _joy_pos - _joy_center
+			if v.length() > JOY_R:
+				v = v.normalized() * JOY_R
+			move = v / JOY_R
+			queue_redraw()
+		elif event.index == _look_index:
+			look_delta += p - _look_last
+			_look_last = p
+		elif event.index == _fire_index:
+			# Можна водити прицілом, тримаючи кнопку вогню
+			look_delta += p - _fire_last
+			_fire_last = p
+
+
+func _draw() -> void:
+	var font := ThemeDB.fallback_font
+	var s := get_viewport_rect().size
+	if _joy_index != -1:
+		draw_circle(_joy_center, JOY_R, Color(1, 1, 1, 0.1))
+		draw_circle(_joy_pos, 46.0, Color(1, 1, 1, 0.35))
+	else:
+		var c := Vector2(180.0, s.y - 180.0)
+		draw_arc(c, JOY_R, 0.0, TAU, 48, Color(1, 1, 1, 0.18), 3.0)
+		draw_circle(c, 40.0, Color(1, 1, 1, 0.12))
+	var b := _buttons()
+	for k in b:
+		var c: Vector2 = b[k][0]
+		var r: float = b[k][1]
+		var lbl: String = b[k][2]
+		var col: Color = b[k][3]
+		var a := 0.28
+		if (k == "fire" and fire):
+			a = 0.55
+		draw_circle(c, r, Color(col.r, col.g, col.b, a))
+		draw_arc(c, r, 0.0, TAU, 40, Color(col.r, col.g, col.b, 0.8), 2.5)
+		var fs := int(r * 0.32)
+		draw_string(font, c + Vector2(-r, fs * 0.35), lbl, HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, fs, Color(1, 1, 1, 0.95))
+
+
+func _process(_delta: float) -> void:
+	queue_redraw()

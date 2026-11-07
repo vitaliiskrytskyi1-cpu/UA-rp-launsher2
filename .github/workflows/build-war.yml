@@ -1,0 +1,117 @@
+name: Build War Game
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "war-game/**"
+      - ".github/workflows/build-war.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GODOT: 4.3
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Download Godot
+        run: |
+          mkdir -p ~/godot && cd ~/godot
+          base=https://github.com/godotengine/godot-builds/releases/download/${GODOT}-stable
+          curl -sSLO $base/Godot_v${GODOT}-stable_linux.x86_64.zip
+          curl -sSLO $base/Godot_v${GODOT}-stable_win64.exe.zip
+          curl -sSLO $base/Godot_v${GODOT}-stable_export_templates.tpz
+          unzip -q Godot_v${GODOT}-stable_linux.x86_64.zip
+          mv Godot_v${GODOT}-stable_linux.x86_64 godot && chmod +x godot
+          mkdir -p ~/.local/share/godot/export_templates/${GODOT}.stable
+          unzip -q Godot_v${GODOT}-stable_export_templates.tpz -d tpl
+          mv tpl/templates/* ~/.local/share/godot/export_templates/${GODOT}.stable/
+          ./godot --version
+
+      - name: Import project
+        working-directory: war-game
+        run: |
+          ~/godot/godot --headless --path . --import 2>&1 | tail -20 || true
+
+      - name: Smoke test (server + 2 bots)
+        working-directory: war-game
+        run: |
+          set +e
+          timeout 40 ~/godot/godot --headless --path . -- --server --port=7000 > server.log 2>&1 &
+          sleep 5
+          timeout 28 ~/godot/godot --headless --path . -- --bot --host=127.0.0.1 --port=7000 > bot1.log 2>&1 &
+          sleep 1
+          timeout 26 ~/godot/godot --headless --path . -- --bot --host=127.0.0.1 --port=7000 > bot2.log 2>&1 &
+          sleep 36
+          echo "===== SERVER ====="; cat server.log
+          echo "===== BOT1 ====="; cat bot1.log
+          echo "===== BOT2 ====="; cat bot2.log
+          if grep -E "SCRIPT ERROR|Parse Error|Invalid call|Invalid get|Invalid set|Invalid access|Invalid operands|Compile Error|Failed to load script" server.log bot1.log bot2.log; then
+            echo "SMOKE_TEST=FAILED" > smoke.txt
+          else
+            echo "SMOKE_TEST=OK" > smoke.txt
+          fi
+          cat smoke.txt
+
+      - name: Export Android APK
+        working-directory: war-game
+        run: |
+          keytool -genkeypair -v -keystore ~/debug.keystore -storepass android -alias androiddebugkey -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" >/dev/null 2>&1
+          mkdir -p ~/.config/godot
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/java_sdk_path = "%s"\nexport/android/debug_keystore = "%s"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' \
+            "$SDK" "$JAVA_HOME" "$HOME/debug.keystore" > ~/.config/godot/editor_settings-4.3.tres
+          cp ~/.config/godot/editor_settings-4.3.tres ~/.config/godot/editor_settings-4.tres
+          export GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$HOME/debug.keystore
+          export GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey
+          export GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android
+          mkdir -p build
+          ~/godot/godot --headless --path . --export-debug "Android" build/UAWarFront.apk 2>&1 | tee export.log | tail -40
+          ls -la build
+
+      - name: Package Windows server
+        run: |
+          mkdir -p ~/godot/win && cd ~/godot/win && unzip -q ../Godot_v${GODOT}-stable_win64.exe.zip && ls
+          cd $GITHUB_WORKSPACE
+          D=pkg/UA-WarFront-Server
+          mkdir -p $D/game
+          cp ~/godot/win/*.exe $D/
+          cp war-game/*.gd war-game/*.tscn war-game/project.godot $D/game/
+          CON=$(cd $D && ls *console*.exe | head -1)
+          printf '@echo off\r\ncd /d "%%~dp0"\r\necho UA War Front server, UDP port 7000\r\n"%s" --headless --path game -- --server --port=7000\r\npause\r\n' "$CON" > $D/start-war-server.bat
+          cd pkg && zip -qr ../UA-WarFront-Server.zip UA-WarFront-Server && cd ..
+          ls -la UA-WarFront-Server.zip
+
+      - name: Save results to branch war-build
+        if: always()
+        run: |
+          mkdir -p /tmp/out
+          cp war-game/*.log war-game/smoke.txt /tmp/out/ 2>/dev/null || true
+          cp war-game/build/UAWarFront.apk /tmp/out/ 2>/dev/null || true
+          cp UA-WarFront-Server.zip /tmp/out/ 2>/dev/null || true
+          cd /tmp/out
+          git init -q -b war-build
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A
+          git commit -qm "War build ${{ github.sha }} (${{ job.status }})"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" war-build
+
+      - name: Publish release
+        if: success()
+        run: |
+          gh release delete war-latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create war-latest war-game/build/UAWarFront.apk UA-WarFront-Server.zip \
+            --title "UA War Front" --notes "Остання збірка гри UA War Front (APK для Android і сервер для Windows)."
