@@ -70,6 +70,10 @@ var drone_yaw := 0.0
 var drone_tilt := -15.0
 var drone_speed_mode := 1
 var drone_sound: AudioStreamPlayer
+var drone_recon := false
+var in_veh := -1
+var veh_seat := -1
+var veh_send_t := 0.0
 
 # бот для автотесту
 var bot_t := 0.0
@@ -77,6 +81,7 @@ var bot_age := 0.0
 var bot_move := Vector2.ZERO
 var bot_turn := 0.0
 var bot_step := 0
+var bot_veh := -1
 
 
 func setup(m, t, is_bot: bool) -> void:
@@ -196,6 +201,14 @@ func set_prone(on: bool) -> void:
 
 func respawn(pos: Vector3, yaw_rad: float) -> void:
 	end_drone()
+	if in_veh >= 0:
+		var v = main.vnodes.get(in_veh)
+		if v and is_instance_valid(v):
+			v.local_driver = false
+	in_veh = -1
+	veh_seat = -1
+	col_shape.disabled = false
+	arm.spring_length = 2.7
 	global_position = pos
 	velocity = Vector3.ZERO
 	yaw = rad_to_deg(yaw_rad)
@@ -220,6 +233,13 @@ func respawn(pos: Vector3, yaw_rad: float) -> void:
 
 func die() -> void:
 	end_drone()
+	if in_veh >= 0:
+		var v = main.vnodes.get(in_veh)
+		if v and is_instance_valid(v):
+			v.local_driver = false
+		in_veh = -1
+		veh_seat = -1
+		col_shape.disabled = false
 	set_aim(false)
 	set_physics_process(false)
 	if touch:
@@ -351,6 +371,30 @@ func _physics_process(delta: float) -> void:
 		if bot_step == 7:
 			sprint_in = true
 			mv = Vector2(0.0, -1.0)
+			if bot_age > 15.0:
+				bot_step = 8
+				var nv: int = main.nearest_vehicle(global_position)
+				print("[BOT] nearest vehicle %d" % nv)
+				if nv < 0:
+					# підійти до найближчої машини своєї команди
+					for vid in main.vnodes:
+						if int(main.vnodes[vid].team) == main.my_team:
+							global_position = main.vnodes[vid].global_position + Vector3(3.5, 0.5, 0.0)
+							nv = vid
+							break
+				print("[BOT] vehicles %d, try %d" % [main.vnodes.size(), nv])
+				bot_veh = nv
+		if bot_step == 8:
+			mv = Vector2(0.4, -1.0)
+			if in_veh < 0:
+				mv = Vector2.ZERO
+				if bot_age > 16.5 and bot_veh >= 0:
+					main.request_veh_enter(bot_veh)
+					bot_veh = -1
+			if bot_age > 20.0 and in_veh >= 0:
+				bot_step = 9
+				print("[BOT] drove to %s" % str(global_position))
+				main.request_veh_exit()
 	else:
 		if touch and touch.visible:
 			mv = touch.move
@@ -428,6 +472,11 @@ func _physics_process(delta: float) -> void:
 		want_aim = want_aim or _take_key("aim")
 		want_crouch = want_crouch or _take_key(KEY_C)
 
+	if not bot and _take_key(KEY_T) and touch:
+		touch.veh_pressed = true
+	if in_veh >= 0:
+		_vehicle_process(delta, mv, look)
+		return
 	if drone_active:
 		if want_speed:
 			drone_speed_mode = (drone_speed_mode + 1) % DRONE_SPEEDS.size()
@@ -486,6 +535,72 @@ func _physics_process(delta: float) -> void:
 		var mode := (1 if drone_active else 0) | (2 if crouching else 0) | (4 if aiming else 0) | (8 if prone else 0) \
 			| (16 if lean < 0 else 0) | (32 if lean > 0 else 0) | (64 if sprinting else 0) | (128 if not is_on_floor() else 0)
 		main.send_state(global_position, rotation.y, head.rotation.x, mode, dpos, dyaw)
+
+
+## У машині: водій керує, пасажир їде; камера — позаду машини.
+func _vehicle_process(delta: float, mv: Vector2, look: Vector2) -> void:
+	var v = main.vnodes.get(in_veh)
+	if v == null or not is_instance_valid(v):
+		exit_vehicle()
+		return
+	var sens := LOOK_SENS * float(Settings.value("controls", "sens", 1.0))
+	if int(Settings.value("controls", "invert_y", 0)) == 1:
+		look.y = -look.y
+	yaw -= look.x * sens
+	pitch = clampf(pitch - look.y * sens, -55.0, 15.0)
+	rotation_degrees.y = yaw
+	head.rotation_degrees.x = pitch
+	if veh_seat == 0:
+		v.local_driver = true
+		v.drive(mv, delta)
+		veh_send_t -= delta
+		if veh_send_t <= 0.0:
+			veh_send_t = 0.05
+			main.send_veh_state(in_veh, v.global_position, v.rotation.y)
+	global_position = v.global_position + Vector3(0.0, 0.6, 0.0)
+	velocity = Vector3.ZERO
+	model.animate(0.0, delta)
+	send_t -= delta
+	if send_t <= 0.0:
+		send_t = SEND_RATE
+		main.send_state(global_position, rotation.y, head.rotation.x, 256, Vector3.ZERO, 0.0)
+
+
+func enter_vehicle(vid: int, seat: int) -> void:
+	end_drone()
+	set_aim(false)
+	in_veh = vid
+	veh_seat = seat
+	col_shape.disabled = true
+	model.visible = false
+	arm.spring_length = 9.5
+	arm.position = Vector3(0.0, 1.6, 0.0)
+	pitch = -12.0
+	var v = main.vnodes.get(vid)
+	if v:
+		yaw = rad_to_deg(v.rotation.y)
+	if touch:
+		touch.reset_input()
+
+
+func exit_vehicle() -> void:
+	if in_veh < 0:
+		return
+	var v = main.vnodes.get(in_veh)
+	if v and is_instance_valid(v):
+		v.local_driver = false
+		var side: Vector3 = v.global_transform.basis.x.normalized() * 2.9
+		var ep: Vector3 = v.global_position + side
+		ep.y = World.ground_y(null, ep.x, ep.z, v.global_position.y) + 0.3
+		global_position = ep
+	in_veh = -1
+	veh_seat = -1
+	col_shape.disabled = false
+	model.visible = true
+	arm.spring_length = 2.7
+	arm.position = Vector3(_cam_x, 0.2, 0.0)
+	if touch:
+		touch.reset_input()
 
 
 func eye_pos() -> Vector3:
@@ -664,11 +779,13 @@ func _soldier_process(delta: float, mv: Vector2, look: Vector2, firing: bool, ju
 
 # ---------------------------------------------------------------- FPV-дрон
 
-func start_drone(pos: Vector3) -> void:
+func start_drone(pos: Vector3, recon: bool = false) -> void:
 	if drone_active:
 		return
 	drone_active = true
-	drones = maxi(0, drones - 1)
+	drone_recon = recon
+	if not recon:
+		drones = maxi(0, drones - 1)
 	_recalc_weight()
 	set_aim(false)
 	drone_node = main.make_drone(main.my_team)
@@ -740,7 +857,7 @@ func _drone_process(delta: float, mv: Vector2, look: Vector2, up: bool, down: bo
 		q.collision_mask = 1
 		var hit := get_world_3d().direct_space_state.intersect_ray(q)
 		if not hit.is_empty():
-			if drone_vel.length() > 5.0:
+			if drone_vel.length() > 5.0 and not drone_recon:
 				main.local_drone_boom(hit.position)
 				return
 			drone_vel = Vector3.ZERO
@@ -757,6 +874,19 @@ func _drone_process(delta: float, mv: Vector2, look: Vector2, up: bool, down: bo
 	if drone_sound:
 		drone_sound.pitch_scale = 0.85 + drone_vel.length() / 30.0 + absf(vert) * 0.1
 	if main.drone_seconds_left() <= 0.0:
+		return
+	if drone_recon:
+		if want_boom and drone_cam:
+			# позначка: точка на землі в центрі камери
+			var cf := drone_cam.global_position
+			var cd := -drone_cam.global_transform.basis.z
+			var q2 := PhysicsRayQueryParameters3D.create(cf, cf + cd * 400.0)
+			q2.collision_mask = 1
+			var h2 := get_world_3d().direct_space_state.intersect_ray(q2)
+			if not h2.is_empty():
+				main.recon_mark(h2.position)
+			else:
+				main.show_hint("Наведіть камеру на землю")
 		return
 	if want_boom or main.enemy_near(to, 2.2):
 		main.local_drone_boom(to)

@@ -182,6 +182,24 @@ static func draw(ci: CanvasItem, name: String, c: Vector2, s: float, col: Color)
 			ci.draw_rect(Rect2(c - Vector2(s * 0.4, s * 0.3), Vector2(s * 0.8, s * 0.6)), col)
 			ci.draw_rect(Rect2(c - Vector2(s * 0.06, s * 0.2), Vector2(s * 0.12, s * 0.4)), Color(0.8, 0.1, 0.1))
 			ci.draw_rect(Rect2(c - Vector2(s * 0.2, s * 0.06), Vector2(s * 0.4, s * 0.12)), Color(0.8, 0.1, 0.1))
+		"apc":
+			ci.draw_rect(Rect2(c + Vector2(-s * 0.42, -s * 0.1), Vector2(s * 0.84, s * 0.26)), col)
+			ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-s * 0.3, -s * 0.1), c + Vector2(-s * 0.18, -s * 0.28), c + Vector2(s * 0.3, -s * 0.28), c + Vector2(s * 0.42, -s * 0.1)]), col)
+			for k in 4:
+				ci.draw_circle(c + Vector2(-s * 0.3 + k * s * 0.2, s * 0.24), s * 0.08, col)
+		"exit":
+			ci.draw_rect(Rect2(c + Vector2(-s * 0.36, -s * 0.36), Vector2(s * 0.4, s * 0.72)), col, false, w)
+			ci.draw_line(c + Vector2(-s * 0.05, 0.0), c + Vector2(s * 0.42, 0.0), col, w * 1.2)
+			ci.draw_colored_polygon(PackedVector2Array([c + Vector2(s * 0.46, 0.0), c + Vector2(s * 0.28, -s * 0.14), c + Vector2(s * 0.28, s * 0.14)]), col)
+		"mark":
+			ci.draw_line(c + Vector2(-s * 0.2, s * 0.42), c + Vector2(-s * 0.2, -s * 0.42), col, w * 1.2)
+			ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-s * 0.2, -s * 0.42), c + Vector2(s * 0.36, -s * 0.27), c + Vector2(-s * 0.2, -s * 0.1)]), col)
+		"recon":
+			ci.draw_rect(Rect2(c + Vector2(-s * 0.16, -s * 0.12), Vector2(s * 0.32, s * 0.2)), col)
+			for d in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
+				ci.draw_line(c, c + d * s * 0.32, col, w)
+				ci.draw_arc(c + d * s * 0.36, s * 0.12, 0.0, TAU, 12, col, w * 0.7)
+			ci.draw_circle(c + Vector2(0.0, s * 0.16), s * 0.07, col)
 		"gear":
 			for i in 8:
 				var a := TAU * i / 8.0

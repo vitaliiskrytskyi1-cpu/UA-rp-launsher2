@@ -17,13 +17,9 @@ const Settings = preload("res://settings.gd")
 ## Карти. «field» — генерована лінія фронту, решта — 3D-скани хуторів Фарерських островів
 ## (Національний музей Фарер, CC0). half — половина розміру, base — відстань баз від центру.
 const MAPS := [
-	{"id": "field", "name": "Лінія фронту", "half": 150.0, "hz": 150.0, "base": 120.0, "base_r": 32.0, "cap": 14.0},
-	{"id": "groth", "name": "Ґротхустанґі", "file": "groth", "half": 38.9, "hz": 59.7, "b0": Vector2(0.0, -46.0), "b1": Vector2(0.0, 46.0), "base_r": 12.0, "cap": 9.0, "hmin": -10.2},
-	{"id": "heima", "name": "Гейма-ї-Гусі", "file": "heima", "half": 45.4, "hz": 52.0, "b0": Vector2(-7.8, -26.0), "b1": Vector2(7.8, 26.0), "base_r": 9.0, "cap": 8.0, "hmin": -7.5},
-	{"id": "leirvik", "name": "Лейрвік", "file": "leirvik", "half": 121.0, "hz": 110.5, "b0": Vector2(0.0, -54.0), "b1": Vector2(18.0, 78.0), "base_r": 16.0, "cap": 11.0, "hmin": -9.0},
-	{"id": "trenches", "name": "Окопи", "file": "trenches", "half": 38.4, "hz": 74.8, "b0": Vector2(-20.0, 62.0), "b1": Vector2(20.0, -62.0), "base_r": 8.0, "cap": 9.0, "hmin": -3.0, "floor": true, "no_bags": true},
-	{"id": "depil", "name": "Депіль", "file": "depil", "half": 116.4, "hz": 103.1, "b0": Vector2(-11.6, -70.0), "b1": Vector2(11.6, 75.0), "base_r": 16.0, "cap": 11.0, "hmin": -18.0},
+	{"id": "front", "name": "Фронт", "file": "front", "half": 200.0, "hz": 200.0, "b0": Vector2(0.0, -172.0), "b1": Vector2(0.0, 172.0), "base_r": 20.0, "cap": 14.0, "hmin": -12.0},
 ]
+const Front = preload("res://front.gd")
 static var cur: Dictionary = MAPS[0]
 static var cur_index := 0
 ## Груба карта висот (сітка 1 м) — для точок появи без запитів до фізики.
@@ -49,6 +45,8 @@ static func base_pos(team: int) -> Vector2:
 
 ## Висота землі в точці (x, z) за колізією світу; якщо землі немає — fallback.
 static func ground_y(w: Node3D, x: float, z: float, fallback: float = 0.0) -> float:
+	if String(cur.id) == "front":
+		return Front.height(x, z)
 	if cur.has("file") and _hw > 0:
 		var gx := int(floor(x - _hx0))
 		var gz := int(floor(z - _hz0))
@@ -429,6 +427,8 @@ static func _multi(parent: Node3D, mesh: Mesh, mat: Material, xforms: Array) -> 
 static func build(parent: Node, visuals: bool, map_idx: int = 0) -> Node3D:
 	cur_index = clampi(map_idx, 0, MAPS.size() - 1)
 	cur = MAPS[cur_index]
+	if String(cur.id) == "front":
+		return Front.build(parent, visuals, load("res://world.gd"))
 	if cur.has("file"):
 		return _build_scan(parent, visuals)
 	var w := Node3D.new()

@@ -32,6 +32,10 @@ var lean_l_pressed := false
 var lean_r_pressed := false
 var shoulder_pressed := false
 var settings_pressed := false
+var veh_pressed := false
+var in_vehicle := false
+var veh_near := false
+var recon := false
 var auto_sprint := true
 var sprint := false        # біг (джойстик далеко вперед або кнопка бігу)
 var sprint_lock := false   # біг зафіксовано
@@ -73,7 +77,7 @@ const ELEMENT_NAMES := {
 	"stand": "Встати", "crouch": "Присісти", "prone_l": "Лягти (ліва)", "shoulder": "Плече камери",
 	"lean_l": "Нахил ліворуч", "lean_r": "Нахил праворуч", "run": "Біг", "walk": "Ходьба",
 	"shop": "Магазин", "bag": "Рюкзак", "drone": "FPV-дрон", "aim": "Приціл", "fire": "Вогонь",
-	"jump": "Стрибок", "reload": "Перезарядка", "grenade": "Граната", "prone": "Лягти (права)", "settings": "Налаштування",
+	"jump": "Стрибок", "reload": "Перезарядка", "grenade": "Граната", "prone": "Лягти (права)", "settings": "Налаштування", "veh": "Сісти / вийти з машини",
 }
 
 
@@ -153,7 +157,7 @@ func _buttons() -> Dictionary:
 	var yellow := Color(1.0, 0.82, 0.2)
 	if drone_mode:
 		var dd := {
-			"boom": [Vector2(s.x - 190.0 * u, s.y - 200.0 * u), 86.0 * u, "boom", Color(0.95, 0.3, 0.25), false],
+			"boom": [Vector2(s.x - 190.0 * u, s.y - 200.0 * u), 86.0 * u, "mark" if recon else "boom", Color(1.0, 0.82, 0.2) if recon else Color(0.95, 0.3, 0.25), false],
 			"up": [Vector2(s.x - 380.0 * u, s.y - 300.0 * u), 58.0 * u, "up", white, false],
 			"down": [Vector2(s.x - 380.0 * u, s.y - 120.0 * u), 58.0 * u, "down", white, false],
 			"speed": [Vector2(s.x - 110.0 * u, s.y - 420.0 * u), 50.0 * u, "speed", yellow, false],
@@ -161,6 +165,20 @@ func _buttons() -> Dictionary:
 		for k in dd:
 			(dd[k] as Array).append(1.0)
 		return dd
+	if in_vehicle:
+		var dv := {
+			"veh": [Vector2(s.x - 150.0 * u, s.y - 200.0 * u), 70.0 * u, "exit", white, false],
+			"settings": [Vector2(192.0 * u, 92.0 * u), 30.0 * u, "gear", white, false],
+		}
+		var ov := {}
+		for k in dv:
+			var pr0 := _apply_el(k, dv[k][0], dv[k][1])
+			var b0: Array = dv[k]
+			b0[0] = pr0[0]
+			b0[1] = pr0[1]
+			b0.append(el_alpha(k))
+			ov[k] = b0
+		return ov
 	var lx1 := 82.0 * u
 	var lx2 := 196.0 * u
 	var r := 44.0 * u
@@ -187,6 +205,8 @@ func _buttons() -> Dictionary:
 		"prone": [Vector2(s.x - 85.0 * u, s.y - 85.0 * u), 52.0 * u, "prone", white, prone],
 		"settings": [Vector2(192.0 * u, 92.0 * u), 30.0 * u, "gear", white, false],
 	}
+	if veh_near or edit_mode:
+		d["veh"] = [Vector2(s.x - 330.0 * u, s.y - 230.0 * u), 46.0 * u, "apc", yellow, false]
 	# власна розкладка гравця
 	var out := {}
 	for k in d:
@@ -247,7 +267,7 @@ func _hit_button(p: Vector2) -> String:
 		var rr: float = b[k][1]
 		if p.distance_to(c) <= rr * 1.12:
 			return k
-	if not drone_mode:
+	if not drone_mode and not in_vehicle:
 		if not el_hidden("slots"):
 			var sl := _slots()
 			for k in sl:
@@ -387,6 +407,7 @@ func _input(event: InputEvent) -> void:
 				"shop": shop_pressed = true
 				"bag": bag_pressed = true
 				"settings": settings_pressed = true
+				"veh": veh_pressed = true
 				"crouch": crouch_pressed = true
 				"stand": stand_pressed = true
 				"map": map_pressed = true
@@ -557,7 +578,7 @@ func _draw() -> void:
 	if edit_mode:
 		_edit_mark(Vector2.ZERO, 0.0, "minimap", minimap_rect())
 		draw_string(font, minimap_rect().position + Vector2(8, 28), "Міні-карта", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1, 1, 1, 0.8))
-	if el_hidden("slots") and not edit_mode:
+	if (el_hidden("slots") or in_vehicle) and not edit_mode:
 		return
 
 	# ---- нижня панель: слоти, здоров'я, броня

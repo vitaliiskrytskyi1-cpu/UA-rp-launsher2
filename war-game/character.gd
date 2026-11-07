@@ -707,7 +707,7 @@ func animate(speed: float, delta: float) -> void:
 	# --- таз
 	var kneel := c * (1.0 - mk)
 	var duck := c * mk
-	var bounce := absf(sin(_phase)) * (0.03 + sk * 0.03) * k * (1.0 - c) * stand
+	var bounce := absf(sin(_phase)) * (0.045 + sk * 0.05) * k * (1.0 - c) * stand
 	var land := sin(clampf(_land_t / 0.35, 0.0, 1.0) * PI) * 0.12
 	var drop := (kneel * 0.44 + duck * 0.3 - bounce + land) * stand
 	var hips_off := Vector3(lk * -0.03, -drop + ak * 0.02, kneel * 0.04)
@@ -766,18 +766,18 @@ func animate(speed: float, delta: float) -> void:
 	_set_rel(_bi("RightFoot"), e_rf)
 
 	# --- корпус
-	var lean_f := (0.07 * k + kneel * 0.12 + duck * 0.2 + _aim_k * 0.05 + sk * 0.3) * stand
+	var lean_f := (0.12 * k + kneel * 0.12 + duck * 0.2 + _aim_k * 0.05 + sk * 0.42) * stand
 	var pitch := clampf(look_pitch, -1.2, 1.2) * (1.0 if hold else 0.4)
 	var pitch_p := pitch * stand + clampf(look_pitch, -0.3, 0.6) * pk * 0.6
 	var br := sin(_breath) * (0.015 + sk * 0.01)
 	var twist := blade / 3.0
-	var roll := -lk * 0.2 + sin(_phase) * 0.03 * k * stand
+	var roll := -lk * 0.2 + sin(_phase) * (0.05 + sk * 0.04) * k * stand * (1.0 - _aim_k * 0.7)
 	var e_sp := Quaternion(UP, twist) * Quaternion(RIGHT, -lean_f * 0.4 + pitch_p * 0.22 + br + pk * 0.08) * Quaternion(BACK_Z, roll)
 	var e_sp1 := Quaternion(UP, twist) * Quaternion(RIGHT, -lean_f * 0.3 + pitch_p * 0.22 - br * 0.5 + pk * 0.06) * Quaternion(BACK_Z, roll)
-	var e_sp2 := Quaternion(UP, twist + sin(_phase) * 0.06 * k * stand - _turn_s * 0.02) * Quaternion(RIGHT, -lean_f * 0.3 + pitch_p * 0.22) * Quaternion(BACK_Z, roll)
+	var e_sp2 := Quaternion(UP, twist + sin(_phase) * (0.1 + sk * 0.1) * k * stand * (1.0 - _aim_k * 0.7) - _turn_s * 0.02) * Quaternion(RIGHT, -lean_f * 0.3 + pitch_p * 0.22) * Quaternion(BACK_Z, roll)
 	if mw > 0.001 and mc_q.has("Spine2"):
 		var hq2: Quaternion = mc_q.get("Hips", Quaternion.IDENTITY)
-		var sk_w := mw * (0.35 if hold else 0.8)
+		var sk_w := mw * ((0.6 - _aim_k * 0.4) if hold else 0.85)
 		e_sp = e_sp * _qmix(Quaternion.IDENTITY, hq2.inverse() * (mc_q.Spine as Quaternion), sk_w)
 		e_sp1 = e_sp1 * _qmix(Quaternion.IDENTITY, (mc_q.Spine as Quaternion).inverse() * (mc_q.Spine1 as Quaternion), sk_w)
 		e_sp2 = e_sp2 * _qmix(Quaternion.IDENTITY, (mc_q.Spine1 as Quaternion).inverse() * (mc_q.Spine2 as Quaternion), sk_w)
@@ -799,7 +799,7 @@ func animate(speed: float, delta: float) -> void:
 	var ihd := _bi("Head")
 	var e_ne := Quaternion(RIGHT, pitch * 0.17 * stand - lean_f * 0.2 + pk * 0.75) * Quaternion(BACK_Z, -roll * 1.2)
 	var e_hd := Quaternion(RIGHT, pitch * 0.17 * stand - _aim_k * 0.12 + kneel * 0.1 + pk * 0.55) * Quaternion(BACK_Z, -_aim_k * 0.1 + lk * 0.1) \
-		* Quaternion(UP, -sin(_phase) * 0.05 * k * stand)
+		* Quaternion(UP, -sin(_phase) * 0.07 * k * stand) * Quaternion(RIGHT, sin(_phase * 2.0) * (0.03 + sk * 0.04) * k * stand * (1.0 - _aim_k))
 	_set_rel(ine, e_ne)
 	_set_rel(ihd, e_hd)
 	var q_ne := q_sp2 * e_ne
@@ -813,7 +813,7 @@ func animate(speed: float, delta: float) -> void:
 
 	# --- зброя
 	var wt := Transform3D.IDENTITY
-	var bob := sin(_phase * 2.0) * (0.012 + sk * 0.02) * k
+	var bob := sin(_phase * 2.0) * (0.02 + sk * 0.045) * k * (1.0 - _aim_k * 0.6)
 	var wpiv: Vector3 = RP[isp2]
 	if _slot == 0:
 		var ready := Transform3D(Basis(UP, 0.28) * Basis(RIGHT, -0.45), Vector3(0.13, 1.12 + bob, -0.29))
@@ -826,7 +826,8 @@ func animate(speed: float, delta: float) -> void:
 		wt = Transform3D(Basis(UP, 0.3) * Basis(RIGHT, 0.7), Vector3(0.08, 1.1 + bob, -0.3))
 	# лежачи: зброя вперед, на рівні землі
 	var prone_wt := Transform3D(Basis(UP, 0.04), wpiv + Vector3(0.07, -0.08 + bob * 0.5, -0.42))
-	var wq := Quaternion(UP, sin(_phase) * 0.03 * k - _turn_s * 0.025) * Quaternion(RIGHT, pitch * 0.66 * stand) * Quaternion(BACK_Z, -lk * 0.25)
+	var sway := (1.0 - _aim_k * 0.75) * k * stand
+	var wq := Quaternion(UP, sin(_phase) * (0.06 + sk * 0.1) * sway - _turn_s * 0.025) * Quaternion(RIGHT, pitch * 0.66 * stand + sin(_phase * 2.0) * 0.04 * sway) * Quaternion(BACK_Z, -lk * 0.25 + sin(_phase) * (0.06 + sk * 0.08) * sway)
 	var w_stand := Transform3D(Basis(wq), p_sp2) * Transform3D(Basis(), -wpiv) * wt
 	var w_prone := Transform3D(Basis(Quaternion(RIGHT, clampf(look_pitch, -0.2, 0.5) * 0.5)), p_sp2) * Transform3D(Basis(), -wpiv) * prone_wt
 	weapon_root.transform = w_stand.interpolate_with(w_prone, pk) if pk > 0.001 else w_stand

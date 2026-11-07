@@ -18,6 +18,12 @@ const HudEdit = preload("res://hudedit.gd")
 const SettingsPanel = preload("res://settings_panel.gd")
 const Settings = preload("res://settings.gd")
 const UI = preload("res://uikit.gd")
+const Vehicle = preload("res://vehicle.gd")
+const Front = preload("res://front.gd")
+const VEH_HP := 600.0
+const VEH_RESPAWN := 30.0
+const RECON_LIFETIME := 180.0
+const BOT_NAMES := ["Сокіл", "Грім", "Вовк", "Тайфун", "Шершень", "Беркут", "Барс", "Скіф", "Яструб", "Сич", "Рись", "Буревій", "Кремінь", "Лис", "Граніт", "Ворон"]
 static var _fpv_scene: PackedScene
 
 const VERSION := 8
@@ -68,9 +74,17 @@ var my_role := ""
 var in_match := false
 var map_index := 0
 var map_pref := 0
+var vehicles := {}          # сервер: машини
+var vnodes := {}            # клієнт: моделі машин
+var bot_fill := 8           # сервер: ботів до N бійців у кожній команді
+var bot_seq := 0
+var spotted := {}           # клієнт: id -> час, поки ворога видно на карті
+var waypoint := Vector3.ZERO
+var waypoint_t := 0.0
 
 # сервер
 var snap_t := 0.0
+var recon_t := 0.0
 var tick_acc := 0.0
 var drain_acc := 0
 var round_reset_t := 0.0
@@ -138,6 +152,8 @@ func _ready() -> void:
 			host = a.substr(7)
 		elif a.begins_with("--map="):
 			map_pref = int(a.substr(6))
+		elif a.begins_with("--bots="):
+			bot_fill = int(a.substr(7))
 	if args.has("--server"):
 		start_server()
 	elif args.has("--bot"):
@@ -211,7 +227,7 @@ func _load_profile(nick: String) -> Dictionary:
 
 
 func _save_profile(id: int) -> void:
-	if not players.has(id):
+	if not players.has(id) or players[id].ai:
 		return
 	var p: Dictionary = players[id]
 	profiles_cfg.set_value("p", String(p.nick).to_lower(), p.prof)
@@ -230,6 +246,7 @@ func start_server() -> void:
 		get_tree().quit(1)
 		return
 	multiplayer.multiplayer_peer = peer
+	_spawn_vehicles()
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	print("[SERVER] UA War Front v%d started on UDP port %d" % [VERSION, cfg_port])
@@ -242,10 +259,12 @@ func _on_peer_connected(id: int) -> void:
 func _on_peer_disconnected(id: int) -> void:
 	if players.has(id):
 		print("[SERVER] player left: %s" % players[id].nick)
+		_veh_leave(id)
 		_return_carried(id)
 		_save_profile(id)
 		players.erase(id)
 		rpc("cl_remove_player", id)
+		_fill_bots()
 		_lobby_broadcast()
 
 
@@ -265,7 +284,7 @@ func _new_pdata(nick: String, team: int, prof: Dictionary) -> Dictionary:
 		"respawn": 0.0, "drone_t": 0.0, "last_fire": 0, "last_heavy": 0,
 		"in_mag": 0, "mags": 0, "drones": 0, "heavy": 0, "crouch": false,
 		"in_match": false, "role": "", "confirmed": false, "eq": prof.eq.duplicate(), "free": {},
-		"flags": 0, "aim": false, "gren": 0, "armor_dur": 100.0, "helm_dur": 100.0, "last_gren": 0, "med": 0, "heal_t": 0.0,
+		"flags": 0, "veh": -1, "seat": -1, "ai": false, "drone_kind": "", "aim": false, "gren": 0, "armor_dur": 100.0, "helm_dur": 100.0, "last_gren": 0, "med": 0, "heal_t": 0.0,
 	}
 
 
@@ -349,7 +368,7 @@ func _return_carried(id: int) -> void:
 
 func _send_loadout(id: int) -> void:
 	var p: Dictionary = players[id]
-	rpc_id(id, "cl_loadout", p.prof, p.eq, p.in_mag, p.mags, p.drones, p.heavy, p.gren, int(p.armor_dur), int(p.helm_dur), int(p.med))
+	if id > 0: rpc_id(id, "cl_loadout", p.prof, p.eq, p.in_mag, p.mags, p.drones, p.heavy, p.gren, int(p.armor_dur), int(p.helm_dur), int(p.med))
 
 
 func _server_spawn(id: int) -> void:
@@ -362,6 +381,13 @@ func _server_spawn(id: int) -> void:
 	p.helm_dur = 100.0
 	p.pos = spawn_point(p.team)
 	p.yaw = PI if p.team == 0 else 0.0
+	p.veh = -1
+	p.seat = -1
+	if p.ai:
+		p.body.global_position = p.pos
+		p.body.velocity = Vector3.ZERO
+		p.ai_last = p.pos
+		p.ai_goal = Vector3.ZERO
 	rpc("cl_spawn", id, p.pos, p.yaw)
 	_equip(id)
 
@@ -404,7 +430,7 @@ func _give_money(id: int, amount: int, reason: String) -> void:
 	var p: Dictionary = players[id]
 	p.prof.money = int(p.prof.money) + amount
 	_save_profile(id)
-	rpc_id(id, "cl_money", int(p.prof.money), amount, reason)
+	if id > 0: rpc_id(id, "cl_money", int(p.prof.money), amount, reason)
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -413,7 +439,7 @@ func srv_hello(nick: String, ver: int) -> void:
 		return
 	var id := multiplayer.get_remote_sender_id()
 	if ver != VERSION:
-		rpc_id(id, "cl_msg", "Версія гри застаріла. Скачайте нову версію.")
+		if id > 0: rpc_id(id, "cl_msg", "Версія гри застаріла. Скачайте нову версію.")
 		return
 	if players.has(id):
 		return
@@ -422,17 +448,22 @@ func srv_hello(nick: String, ver: int) -> void:
 		nick = "Боєць_%d" % (id % 1000)
 	for pid in players:
 		if String(players[pid].nick).to_lower() == nick.to_lower():
-			rpc_id(id, "cl_msg", "Позивний «%s» вже в грі. Оберіть інший." % nick)
+			if id > 0: rpc_id(id, "cl_msg", "Позивний «%s» вже в грі. Оберіть інший." % nick)
 			return
 	for pid in players:
 		var e: Dictionary = players[pid]
-		rpc_id(id, "cl_add_player", pid, e.nick, e.team, e.kills, e.deaths)
+		if id > 0: rpc_id(id, "cl_add_player", pid, e.nick, e.team, e.kills, e.deaths)
 		if e.alive:
-			rpc_id(id, "cl_gear", pid, e.eq, int(e.slot))
+			if id > 0: rpc_id(id, "cl_gear", pid, e.eq, int(e.slot))
 	players[id] = _new_pdata(nick, -1, _load_profile(nick))
 	rpc("cl_add_player", id, nick, -1, 0, 0)
-	rpc_id(id, "cl_map", map_index)
-	rpc_id(id, "cl_profile", players[id].prof)
+	if id > 0: rpc_id(id, "cl_map", map_index)
+	for vid in vehicles:
+		var vv: Dictionary = vehicles[vid]
+		for si in vv.seats.size():
+			if int(vv.seats[si]) != 0:
+				rpc_id(id, "cl_veh_seat", vid, int(vv.seats[si]), si)
+	if id > 0: rpc_id(id, "cl_profile", players[id].prof)
 	print("[SERVER] %s connected (players: %d)" % [nick, players.size()])
 	_lobby_broadcast()
 
@@ -469,7 +500,7 @@ func _team_size(team: int, except_id: int = -1) -> int:
 	var n := 0
 	for pid in players:
 		var e: Dictionary = players[pid]
-		if pid != except_id and e.confirmed and int(e.team) == team:
+		if pid != except_id and e.confirmed and int(e.team) == team and not e.ai:
 			n += 1
 	return n
 
@@ -486,13 +517,13 @@ func srv_pick(team: int, role: String) -> void:
 	if team < 0 or team > 1 or not Gear.ROLES.has(role):
 		return
 	if p.alive and (int(p.team) != team or String(p.role) != role):
-		rpc_id(id, "cl_msg", "Роль можна змінити лише до початку бою або після загибелі.")
+		if id > 0: rpc_id(id, "cl_msg", "Роль можна змінити лише до початку бою або після загибелі.")
 		return
 	if _team_size(team, id) >= Gear.TEAM_SIZE:
-		rpc_id(id, "cl_pick_result", false, "Команда заповнена (%d з %d). Оберіть іншу." % [Gear.TEAM_SIZE, Gear.TEAM_SIZE])
+		if id > 0: rpc_id(id, "cl_pick_result", false, "Команда заповнена (%d з %d). Оберіть іншу." % [Gear.TEAM_SIZE, Gear.TEAM_SIZE])
 		return
 	if _role_count(team, role, id) >= int(Gear.ROLES[role].slots):
-		rpc_id(id, "cl_pick_result", false, "Усі місця «%s» зайняті. Оберіть іншу роль." % Gear.ROLES[role].name)
+		if id > 0: rpc_id(id, "cl_pick_result", false, "Усі місця «%s» зайняті. Оберіть іншу роль." % Gear.ROLES[role].name)
 		return
 	var team_changed := int(p.team) != team
 	p.team = team
@@ -500,11 +531,12 @@ func srv_pick(team: int, role: String) -> void:
 	p.confirmed = true
 	p.in_match = true
 	rpc("cl_player_team", id, team, role)
-	rpc_id(id, "cl_pick_result", true, "")
+	if id > 0: rpc_id(id, "cl_pick_result", true, "")
 	print("[SERVER] %s: команда %d, роль %s" % [p.nick, team, role])
 	if match_state == "running" and not p.alive:
-		rpc_id(id, "cl_match_start", tickets[0], tickets[1], capture)
+		if id > 0: rpc_id(id, "cl_match_start", tickets[0], tickets[1], capture)
 		p.respawn = 0.5
+		_fill_bots()
 	elif match_state == "waiting" and match_count <= 0.0:
 		match_count = cfg_countdown
 	if team_changed and p.alive:
@@ -523,6 +555,7 @@ func srv_leave_match() -> void:
 	var p: Dictionary = players[id]
 	if p.mode == 1:
 		_end_drone(id, false)
+	_veh_leave(id)
 	_return_carried(id)
 	p.alive = false
 	p.in_match = false
@@ -559,9 +592,11 @@ func _start_match() -> void:
 		p.kills = 0
 		p.deaths = 0
 		if p.confirmed:
-			rpc_id(pid, "cl_match_start", tickets[0], tickets[1], capture)
+			if pid > 0: rpc_id(pid, "cl_match_start", tickets[0], tickets[1], capture)
 			_server_spawn(pid)
 	rpc("cl_status", tickets[0], tickets[1], capture)
+	_reset_vehicles()
+	_fill_bots()
 	_lobby_broadcast()
 
 
@@ -697,7 +732,7 @@ func srv_heal() -> void:
 	if not p.alive or int(p.med) <= 0 or int(p.hp) >= 100 or float(p.heal_t) > 0.0:
 		return
 	p.heal_t = Gear.MEDKIT_TIME
-	rpc_id(id, "cl_heal_start", Gear.MEDKIT_TIME)
+	if id > 0: rpc_id(id, "cl_heal_start", Gear.MEDKIT_TIME)
 
 
 func _update_heals(delta: float) -> void:
@@ -712,7 +747,7 @@ func _update_heals(delta: float) -> void:
 			p.heal_t = 0.0
 			p.med = int(p.med) - 1
 			p.hp = mini(100, int(p.hp) + Gear.MEDKIT_HEAL)
-			rpc_id(pid, "cl_healed", int(p.hp), int(p.med))
+			if pid > 0: rpc_id(pid, "cl_healed", int(p.hp), int(p.med))
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -752,7 +787,7 @@ func srv_drone_start() -> void:
 	if not p.alive or p.mode != 0 or round_over:
 		return
 	if int(p.drones) <= 0:
-		rpc_id(id, "cl_msg", "Немає дронів. Купіть FPV-дрони і рюкзак у магазині.")
+		if id > 0: rpc_id(id, "cl_msg", "Немає дронів. Купіть FPV-дрони і рюкзак у магазині.")
 		return
 	p.drones = int(p.drones) - 1
 	p.mode = 1
@@ -760,7 +795,7 @@ func srv_drone_start() -> void:
 	p.dpos = p.pos + fwd * 1.5 + Vector3(0.0, 1.8, 0.0)
 	p.dyaw = p.yaw
 	p.drone_t = DRONE_LIFETIME
-	rpc_id(id, "cl_drone_ok", p.dpos)
+	if id > 0: rpc_id(id, "cl_drone_ok", p.dpos)
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -793,7 +828,7 @@ func srv_buy(cat: String, key: String, qty: int) -> void:
 			if not prof.owned.has(tag):
 				var price := int(c[key].price)
 				if int(prof.money) < price:
-					rpc_id(id, "cl_msg", "Недостатньо грошей.")
+					if id > 0: rpc_id(id, "cl_msg", "Недостатньо грошей.")
 					return
 				_spend(prof, price)
 				prof.owned.append(tag)
@@ -810,7 +845,7 @@ func srv_buy(cat: String, key: String, qty: int) -> void:
 		"fpv":
 			var cost := Gear.FPV_PRICE * qty
 			if int(prof.money) < cost:
-				rpc_id(id, "cl_msg", "Недостатньо грошей.")
+				if id > 0: rpc_id(id, "cl_msg", "Недостатньо грошей.")
 				return
 			_spend(prof, cost)
 			prof.fpv = int(prof.fpv) + qty
@@ -820,7 +855,7 @@ func srv_buy(cat: String, key: String, qty: int) -> void:
 				return
 			var cost := int(Gear.WEAPONS[key].mag_price) * qty
 			if int(prof.money) < cost:
-				rpc_id(id, "cl_msg", "Недостатньо грошей.")
+				if id > 0: rpc_id(id, "cl_msg", "Недостатньо грошей.")
 				return
 			_spend(prof, cost)
 			prof.mags[key] = int(prof.mags.get(key, 0)) + qty
@@ -828,7 +863,7 @@ func srv_buy(cat: String, key: String, qty: int) -> void:
 		"med":
 			var cost := Gear.MEDKIT_PRICE * qty
 			if int(prof.money) < cost:
-				rpc_id(id, "cl_msg", "Недостатньо грошей.")
+				if id > 0: rpc_id(id, "cl_msg", "Недостатньо грошей.")
 				return
 			_spend(prof, cost)
 			prof.med = int(prof.get("med", 0)) + qty
@@ -836,7 +871,7 @@ func srv_buy(cat: String, key: String, qty: int) -> void:
 		"gren":
 			var cost := Gear.GRENADE_PRICE * qty
 			if int(prof.money) < cost:
-				rpc_id(id, "cl_msg", "Недостатньо грошей.")
+				if id > 0: rpc_id(id, "cl_msg", "Недостатньо грошей.")
 				return
 			_spend(prof, cost)
 			prof.gren = int(prof.get("gren", 0)) + qty
@@ -846,7 +881,7 @@ func srv_buy(cat: String, key: String, qty: int) -> void:
 				return
 			var cost := int(Gear.HEAVY[key].ammo_price) * qty
 			if int(prof.money) < cost:
-				rpc_id(id, "cl_msg", "Недостатньо грошей.")
+				if id > 0: rpc_id(id, "cl_msg", "Недостатньо грошей.")
 				return
 			_spend(prof, cost)
 			prof.heavy_ammo[key] = int(prof.heavy_ammo.get(key, 0)) + qty
@@ -859,7 +894,7 @@ func srv_buy(cat: String, key: String, qty: int) -> void:
 		_equip(id)
 	_save_profile(id)
 	_send_loadout(id)
-	rpc_id(id, "cl_msg", msg)
+	if id > 0: rpc_id(id, "cl_msg", msg)
 	print("[SERVER] %s: %s" % [p.nick, msg])
 
 
@@ -907,12 +942,21 @@ func _physics_process(delta: float) -> void:
 	elif match_state == "running":
 		var anyone := false
 		for pid in players:
-			if players[pid].in_match:
+			if players[pid].in_match and not players[pid].ai:
 				anyone = true
 		if not anyone:
 			match_state = "waiting"
 			match_count = 0.0
+			_remove_bots(true)
+			_reset_vehicles()
 			_lobby_broadcast()
+
+	_update_vehicles(delta)
+	_update_bots(delta)
+	recon_t -= delta
+	if recon_t <= 0.0:
+		recon_t = 1.0
+		_recon_tick()
 
 	snap_t -= delta
 	if snap_t <= 0.0:
@@ -953,9 +997,9 @@ func _process_shot(id: int, origin: Vector3, dir: Vector3) -> void:
 	if not players.has(id):
 		return
 	var p: Dictionary = players[id]
-	if not p.alive or p.mode != 0:
+	if not p.alive or p.mode != 0 or int(p.veh) >= 0:
 		return
-	var w: Dictionary = Gear.WEAPONS[p.prof.eq.w]
+	var w: Dictionary = Gear.WEAPONS[p.eq.w]
 	var eye: Vector3 = p.pos + Vector3(0.0, 1.55, 0.0)
 	if origin.distance_to(eye) > 3.0:
 		origin = eye
@@ -976,7 +1020,7 @@ func _process_shot(id: int, origin: Vector3, dir: Vector3) -> void:
 		if pid == id:
 			continue
 		var e: Dictionary = players[pid]
-		if not e.alive or e.team == p.team:
+		if not e.alive or e.team == p.team or int(e.veh) >= 0:
 			continue
 		for part in hit_parts(e):
 			var d := _ray_sphere(origin, dir, part[0], part[1])
@@ -1063,15 +1107,16 @@ func _damage(vid: int, kid: int, dmg: int, head: bool = false, zone: int = 7, fr
 	if v.hp <= 0:
 		_kill(vid, kid, head)
 	else:
-		rpc_id(vid, "cl_hp", v.hp, zone, maxi(1, dmg), from, int(v.armor_dur), int(v.helm_dur))
+		if vid > 0: rpc_id(vid, "cl_hp", v.hp, zone, maxi(1, dmg), from, int(v.armor_dur), int(v.helm_dur))
 		if players.has(kid) and kid != vid:
-			rpc_id(kid, "cl_hitmark", zone)
+			if kid > 0: rpc_id(kid, "cl_hitmark", zone)
 
 
 func _kill(vid: int, kid: int, head: bool = false) -> void:
 	var v: Dictionary = players[vid]
 	if v.mode == 1:
 		_end_drone(vid, true)
+	_veh_leave(vid)
 	v.alive = false
 	v.hp = 0
 	v.deaths += 1
@@ -1092,6 +1137,8 @@ func _kill(vid: int, kid: int, head: bool = false) -> void:
 		var reward := Gear.REWARD_KILL + (Gear.REWARD_HEADSHOT if head else 0)
 		_give_money(kid, reward, "ліквідація" + (" в голову" if head else ""))
 	tickets[v.team] = maxi(0, tickets[v.team] - 1)
+	if is_server and (OS.get_cmdline_user_args().has("--verbose") or v.ai == false):
+		print("[SERVER] %s ліквідовано (%s)" % [v.nick, kname])
 	rpc("cl_killed", vid, kid, kname)
 	_check_round_end()
 
@@ -1100,7 +1147,7 @@ func _process_boom(id: int, pos: Vector3) -> void:
 	if not players.has(id):
 		return
 	var p: Dictionary = players[id]
-	if p.mode != 1:
+	if p.mode != 1 or String(p.drone_kind) == "recon":
 		return
 	if pos.distance_to(p.dpos) > 12.0:
 		pos = p.dpos
@@ -1110,11 +1157,19 @@ func _process_boom(id: int, pos: Vector3) -> void:
 
 func _explode(pos: Vector3, kid: int, team: int, radius: float, maxdmg: float, reward: int = 0) -> void:
 	rpc("cl_boom", pos, radius)
+	for vid in vehicles.keys():
+		var vv: Dictionary = vehicles[vid]
+		if not vv.alive or int(vv.team) == team:
+			continue
+		var vd: float = (vv.pos + Vector3(0.0, 1.2, 0.0)).distance_to(pos)
+		var r2 := radius + 2.6
+		if vd < r2:
+			_veh_damage(vid, maxdmg * (1.0 - vd / r2) * 1.15, kid)
 	for pid in players.keys():
 		if not players.has(pid):
 			continue
 		var e: Dictionary = players[pid]
-		if not e.alive or e.team == team:
+		if not e.alive or e.team == team or int(e.veh) >= 0:
 			continue
 		if e.mode == 1 and e.dpos.distance_to(pos) < 4.0:
 			_end_drone(pid, true)
@@ -1205,6 +1260,7 @@ func _end_drone(id: int, destroyed: bool) -> void:
 	if p.mode != 1:
 		return
 	p.mode = 0
+	p.drone_kind = ""
 	rpc("cl_drone_end", id, destroyed, p.dpos)
 
 
@@ -1216,12 +1272,18 @@ func _send_snapshot() -> void:
 		if not p.alive:
 			continue
 		ids.append(pid)
-		var m := int(p.mode) | (int(p.flags) & ~1)
+		var m := int(p.mode) | (int(p.flags) & ~1) | (256 if int(p.veh) >= 0 else 0) | (512 if String(p.drone_kind) == "recon" else 0)
 		var vals := [p.pos.x, p.pos.y, p.pos.z, p.yaw, p.pitch, float(m), p.dpos.x, p.dpos.y, p.dpos.z, p.dyaw, float(p.slot)]
 		for v in vals:
 			data.append(v)
 	if ids.size() > 0:
 		rpc("cl_snapshot", ids, data)
+	if not vehicles.is_empty():
+		var vd := PackedFloat32Array()
+		for vid in vehicles:
+			var v: Dictionary = vehicles[vid]
+			vd.append_array([float(vid), v.pos.x, v.pos.y, v.pos.z, float(v.yaw), float(v.hp), 1.0 if v.alive else 0.0, float(v.team)])
+		rpc("cl_vehicles", vd)
 
 
 func _capture_tick() -> void:
@@ -1246,7 +1308,7 @@ func _capture_tick() -> void:
 		for pid in on_point:
 			if players[pid].team == owner:
 				players[pid].prof.money = int(players[pid].prof.money) + Gear.REWARD_CAPTURE_TICK * 3
-				rpc_id(pid, "cl_money", int(players[pid].prof.money), 0, "")
+				if pid > 0: rpc_id(pid, "cl_money", int(players[pid].prof.money), 0, "")
 		_check_round_end()
 	rpc("cl_status", tickets[0], tickets[1], capture)
 
@@ -1276,6 +1338,7 @@ func _switch_map(idx: int) -> void:
 	if world:
 		world.free()
 	world = World.build(self, false, idx)
+	_spawn_vehicles()
 	print("[SERVER] map: %s" % World.cur.name)
 	rpc("cl_map", idx)
 
@@ -1310,17 +1373,448 @@ func _round_restart() -> void:
 	capture = 0.0
 	server_projectiles.clear()
 	mortar_impacts.clear()
+	_remove_bots(true)
 	for pid in players:
 		var p: Dictionary = players[pid]
 		if p.mode == 1:
 			_end_drone(pid, false)
+		_veh_leave(pid)
 		_return_carried(pid)
 		p.alive = false
 		p.confirmed = false
 		_save_profile(pid)
+	_reset_vehicles()
 	rpc("cl_round_lobby")
 	rpc("cl_status", tickets[0], tickets[1], capture)
 	_lobby_broadcast()
+
+
+# =====================================================================
+#   СЕРВЕР: техніка (БТР М113)
+# =====================================================================
+
+func _veh_body(pos: Vector3, yaw: float) -> StaticBody3D:
+	var b := StaticBody3D.new()
+	var cs := CollisionShape3D.new()
+	var bs := BoxShape3D.new()
+	bs.size = Vector3(3.0, 2.3, 5.3)
+	cs.shape = bs
+	cs.position.y = 1.25
+	b.add_child(cs)
+	world.add_child(b)
+	b.global_transform = Transform3D(Basis(Vector3.UP, yaw), pos)
+	return b
+
+
+func _spawn_vehicles() -> void:
+	vehicles.clear()
+	if String(World.cur.id) != "front":
+		return
+	var k := 0
+	for v in Front.layout.vehicles:
+		var x := float(v.x)
+		var z := float(v.z)
+		var pos := Vector3(x, World.ground_y(world, x, z), z)
+		var yaw := float(v.yaw)
+		vehicles[k] = {"pos": pos, "yaw": yaw, "team": int(v.team), "seats": [0, 0, 0, 0, 0, 0], "hp": VEH_HP,
+			"alive": true, "respawn": 0.0, "home": pos, "home_yaw": yaw, "body": _veh_body(pos, yaw)}
+		k += 1
+
+
+func _reset_vehicles() -> void:
+	for vid in vehicles:
+		var v: Dictionary = vehicles[vid]
+		for si in v.seats.size():
+			if int(v.seats[si]) != 0:
+				_veh_leave(int(v.seats[si]))
+		v.pos = v.home
+		v.yaw = v.home_yaw
+		v.hp = VEH_HP
+		v.alive = true
+		v.body.global_transform = Transform3D(Basis(Vector3.UP, v.yaw), v.pos)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func srv_veh_enter(vid: int) -> void:
+	if not is_server:
+		return
+	_veh_enter(multiplayer.get_remote_sender_id(), vid)
+
+
+func _veh_enter(id: int, vid: int) -> void:
+	if not players.has(id) or not vehicles.has(vid):
+		return
+	var p: Dictionary = players[id]
+	var v: Dictionary = vehicles[vid]
+	if not p.alive or int(p.veh) >= 0 or p.mode != 0 or not v.alive:
+		return
+	if int(v.team) != int(p.team):
+		if id > 0: rpc_id(id, "cl_msg", "Це техніка противника.")
+		return
+	if p.pos.distance_to(v.pos) > 7.5:
+		return
+	var seat := -1
+	for si in v.seats.size():
+		if int(v.seats[si]) == 0:
+			seat = si
+			break
+	if seat < 0:
+		if id > 0: rpc_id(id, "cl_msg", "У машині немає вільних місць.")
+		return
+	v.seats[seat] = id
+	p.veh = vid
+	p.seat = seat
+	rpc("cl_veh_seat", vid, id, seat)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func srv_veh_exit() -> void:
+	if not is_server:
+		return
+	_veh_leave(multiplayer.get_remote_sender_id())
+
+
+func _veh_leave(id: int) -> void:
+	if not players.has(id):
+		return
+	var p: Dictionary = players[id]
+	var vid := int(p.veh)
+	if vid < 0:
+		return
+	if vehicles.has(vid):
+		var v: Dictionary = vehicles[vid]
+		var si := int(p.seat)
+		if si >= 0 and si < v.seats.size() and int(v.seats[si]) == id:
+			v.seats[si] = 0
+		# вихід збоку від машини
+		var side := Basis(Vector3.UP, float(v.yaw)) * Vector3(2.9, 0.0, 0.0)
+		var ep: Vector3 = v.pos + side
+		ep.y = World.ground_y(world, ep.x, ep.z, v.pos.y) + 0.3
+		p.pos = ep
+	p.veh = -1
+	p.seat = -1
+	rpc("cl_veh_seat", vid, id, -1)
+
+
+@rpc("any_peer", "call_remote", "unreliable_ordered")
+func srv_veh_state(vid: int, pos: Vector3, yaw: float) -> void:
+	if not is_server or not vehicles.has(vid):
+		return
+	var id := multiplayer.get_remote_sender_id()
+	var v: Dictionary = vehicles[vid]
+	if int(v.seats[0]) != id or not v.alive:
+		return
+	if v.pos.distance_to(pos) < 25.0:
+		v.pos = pos
+		v.yaw = yaw
+		v.body.global_transform = Transform3D(Basis(Vector3.UP, yaw), pos)
+
+
+func _veh_damage(vid: int, dmg: float, kid: int) -> void:
+	var v: Dictionary = vehicles[vid]
+	if not v.alive:
+		return
+	v.hp = float(v.hp) - dmg
+	if players.has(kid) and kid > 0:
+		rpc_id(kid, "cl_hitmark", 7)
+	if v.hp > 0.0:
+		return
+	v.hp = 0.0
+	v.alive = false
+	v.respawn = VEH_RESPAWN
+	rpc("cl_boom", v.pos + Vector3(0.0, 1.0, 0.0), 6.0)
+	for si in v.seats.size():
+		var pid := int(v.seats[si])
+		if pid != 0 and players.has(pid):
+			_veh_leave(pid)
+			_kill(pid, kid)
+	if players.has(kid):
+		_give_money(kid, 1500, "знищено БТР")
+
+
+func _update_vehicles(delta: float) -> void:
+	for vid in vehicles:
+		var v: Dictionary = vehicles[vid]
+		if not v.alive:
+			v.respawn = float(v.respawn) - delta
+			if v.respawn <= 0.0:
+				v.alive = true
+				v.hp = VEH_HP
+				v.pos = v.home
+				v.yaw = v.home_yaw
+				v.body.global_transform = Transform3D(Basis(Vector3.UP, v.yaw), v.pos)
+		else:
+			# пасажири їдуть разом з машиною
+			for si in v.seats.size():
+				var pid := int(v.seats[si])
+				if pid != 0 and players.has(pid):
+					players[pid].pos = v.pos + Vector3(0.0, 0.6, 0.0)
+
+
+# =====================================================================
+#   СЕРВЕР: розвідка дроном
+# =====================================================================
+
+@rpc("any_peer", "call_remote", "reliable")
+func srv_recon_start() -> void:
+	if not is_server:
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if not players.has(id):
+		return
+	var p: Dictionary = players[id]
+	if not p.alive or p.mode != 0 or int(p.veh) >= 0 or round_over:
+		return
+	if String(p.role) != "recon":
+		if id > 0: rpc_id(id, "cl_msg", "Дрон-розвідник є лише в ролі «Розвідник».")
+		return
+	p.mode = 1
+	p.drone_kind = "recon"
+	var fwd := Vector3(-sin(p.yaw), 0.0, -cos(p.yaw))
+	p.dpos = p.pos + fwd * 1.5 + Vector3(0.0, 1.8, 0.0)
+	p.dyaw = p.yaw
+	p.drone_t = RECON_LIFETIME
+	if id > 0: rpc_id(id, "cl_recon_ok", p.dpos)
+
+
+## Позначка розвідника: точка для штурму + вороги поряд з нею підсвічуються команді.
+@rpc("any_peer", "call_remote", "reliable")
+func srv_recon_mark(pos: Vector3) -> void:
+	if not is_server:
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if not players.has(id):
+		return
+	var p: Dictionary = players[id]
+	if p.mode != 1 or String(p.drone_kind) != "recon":
+		return
+	var ids := PackedInt32Array()
+	for pid in players:
+		var e: Dictionary = players[pid]
+		if e.alive and int(e.team) != int(p.team) and (e.pos as Vector3).distance_to(pos) < 30.0:
+			ids.append(pid)
+	for pid in players:
+		if pid > 0 and int(players[pid].team) == int(p.team):
+			rpc_id(pid, "cl_waypoint", pos, String(p.nick))
+			if ids.size() > 0:
+				rpc_id(pid, "cl_spot", ids, 20.0)
+
+
+## Щосекунди: вороги в полі зору дрона-розвідника (до 55 м) видно всій команді.
+func _recon_tick() -> void:
+	for rid in players:
+		var r: Dictionary = players[rid]
+		if r.mode != 1 or String(r.drone_kind) != "recon":
+			continue
+		var ids := PackedInt32Array()
+		for pid in players:
+			var e: Dictionary = players[pid]
+			if not e.alive or int(e.team) == int(r.team):
+				continue
+			var tp: Vector3 = e.pos + Vector3(0.0, 1.0, 0.0)
+			if (r.dpos as Vector3).distance_to(tp) > 55.0:
+				continue
+			var q := PhysicsRayQueryParameters3D.create(r.dpos, tp)
+			q.collision_mask = 1
+			if world.get_world_3d().direct_space_state.intersect_ray(q).is_empty():
+				ids.append(pid)
+		if ids.is_empty():
+			continue
+		for pid in players:
+			if pid > 0 and int(players[pid].team) == int(r.team):
+				rpc_id(pid, "cl_spot", ids, 4.0)
+
+
+# =====================================================================
+#   СЕРВЕР: боти (заповнюють команди до bot_fill бійців)
+# =====================================================================
+
+func _fill_bots() -> void:
+	if bot_fill <= 0 or match_state != "running":
+		return
+	for t in 2:
+		var humans := 0
+		var bots: Array = []
+		for pid in players:
+			var e: Dictionary = players[pid]
+			if int(e.team) == t and e.confirmed:
+				if e.ai:
+					bots.append(pid)
+				else:
+					humans += 1
+		var want := maxi(0, bot_fill - humans)
+		while bots.size() > want:
+			_remove_bot(int(bots.pop_back()))
+		while bots.size() < want:
+			bots.append(_add_bot(t))
+
+
+func _add_bot(team: int) -> int:
+	bot_seq += 1
+	var id := -bot_seq
+	var nick := "Бот %s" % BOT_NAMES[bot_seq % BOT_NAMES.size()]
+	var prof := Gear.new_profile()
+	prof.eq.w = "ak74" if randf() < 0.6 else ("m4" if randf() < 0.5 else "aks74u")
+	prof.mags[prof.eq.w] = 999
+	var p := _new_pdata(nick, team, prof)
+	p.ai = true
+	p.role = "rifle"
+	p.confirmed = true
+	p.in_match = true
+	var body := CharacterBody3D.new()
+	body.collision_layer = 4
+	body.collision_mask = 1
+	var cs := CollisionShape3D.new()
+	var cap := CapsuleShape3D.new()
+	cap.radius = 0.35
+	cap.height = 1.75
+	cs.shape = cap
+	cs.position.y = 0.875
+	body.add_child(cs)
+	world.add_child(body)
+	body.floor_snap_length = 0.6
+	p.body = body
+	p.ai_t = 0.0
+	p.ai_goal = Vector3.ZERO
+	p.ai_target = 0
+	p.ai_stuck = 0.0
+	p.ai_side = Vector3.ZERO
+	p.ai_side_t = 0.0
+	p.ai_last = Vector3.ZERO
+	p.ai_fire = 0.0
+	p.ai_burst = 0
+	players[id] = p
+	rpc("cl_add_player", id, nick, team, 0, 0)
+	rpc("cl_player_team", id, team, "rifle")
+	p.respawn = randf_range(0.2, 2.0)
+	print("[SERVER] бот %s у команді %d" % [nick, team])
+	return id
+
+
+func _remove_bot(id: int) -> void:
+	if not players.has(id):
+		return
+	var p: Dictionary = players[id]
+	if p.has("body") and is_instance_valid(p.body):
+		p.body.queue_free()
+	players.erase(id)
+	rpc("cl_remove_player", id)
+
+
+func _remove_bots(all: bool) -> void:
+	for pid in players.keys():
+		if players[pid].ai and all:
+			_remove_bot(pid)
+
+
+func _bot_can_see(eye: Vector3, tp: Vector3) -> bool:
+	var q := PhysicsRayQueryParameters3D.create(eye, tp)
+	q.collision_mask = 1
+	return world.get_world_3d().direct_space_state.intersect_ray(q).is_empty()
+
+
+func _update_bots(delta: float) -> void:
+	for pid in players.keys():
+		if not players.has(pid):
+			continue
+		var p: Dictionary = players[pid]
+		if not p.ai:
+			continue
+		var body: CharacterBody3D = p.body
+		if not p.alive:
+			body.global_position = Vector3(0.0, -500.0, 0.0)
+			continue
+		if body.global_position.y < -400.0 or (p.ai_last as Vector3) == Vector3.ZERO:
+			body.global_position = p.pos
+			body.velocity = Vector3.ZERO
+			p.ai_last = p.pos
+		var pos := body.global_position
+		var eye := pos + Vector3(0.0, 1.55, 0.0)
+		p.ai_t = float(p.ai_t) - delta
+		if p.ai_t <= 0.0:
+			p.ai_t = 0.4
+			# ціль: найближчий видимий ворог
+			var best := 0
+			var bd := 120.0
+			for eid in players:
+				var e: Dictionary = players[eid]
+				if not e.alive or int(e.team) == int(p.team) or int(e.veh) >= 0:
+					continue
+				var d: float = pos.distance_to(e.pos)
+				if d < bd and _bot_can_see(eye, e.pos + Vector3(0.0, 1.3, 0.0)):
+					bd = d
+					best = eid
+			p.ai_target = best
+			# точка руху: центр (захоплення), потім тримати позицію поряд
+			if (p.ai_goal as Vector3) == Vector3.ZERO or pos.distance_to(p.ai_goal) < 4.0:
+				var cap_r := float(World.cur.cap)
+				var a := randf() * TAU
+				var rr := randf_range(2.0, cap_r + 18.0)
+				p.ai_goal = Vector3(cos(a) * rr, 0.0, sin(a) * rr)
+			# застряг?
+			var moved := Vector2(pos.x - p.ai_last.x, pos.z - p.ai_last.z).length()
+			p.ai_last = pos
+			if moved < 0.35 and int(p.ai_target) == 0:
+				p.ai_stuck = float(p.ai_stuck) + 0.4
+			else:
+				p.ai_stuck = 0.0
+			if float(p.ai_stuck) > 1.2:
+				var a2 := randf() * TAU
+				p.ai_side = Vector3(cos(a2), 0.0, sin(a2))
+				p.ai_side_t = 1.6
+				if body.is_on_floor():
+					body.velocity.y = 8.5
+				p.ai_stuck = 0.0
+		var dirv := Vector3.ZERO
+		var speed := 4.6
+		var tgt := int(p.ai_target)
+		var aiming := false
+		if tgt != 0 and players.has(tgt) and players[tgt].alive:
+			var e: Dictionary = players[tgt]
+			var to: Vector3 = (e.pos as Vector3) - pos
+			p.yaw = atan2(-to.x, -to.z)
+			aiming = true
+			var d := to.length()
+			if d > 45.0:
+				dirv = Vector3(to.x, 0.0, to.z).normalized()
+				speed = 3.0
+			else:
+				var side := Vector3(-to.z, 0.0, to.x).normalized()
+				dirv = side * (1.0 if int(Time.get_ticks_msec() / 1700) % 2 == 0 else -1.0)
+				speed = 1.6
+			# стрільба чергами з розкидом
+			p.ai_fire = float(p.ai_fire) - delta
+			if p.ai_fire <= 0.0:
+				var w: Dictionary = Gear.WEAPONS[p.eq.w]
+				p.ai_fire = float(w.rof)
+				p.ai_burst = int(p.ai_burst) + 1
+				if p.ai_burst > 4:
+					p.ai_burst = 0
+					p.ai_fire = randf_range(0.6, 1.4)
+				var aimp: Vector3 = e.pos + Vector3(0.0, randf_range(0.9, 1.6), 0.0)
+				var err := 0.03 + d * 0.0012
+				var dir := (aimp - eye).normalized() + Vector3(randf_range(-err, err), randf_range(-err, err), randf_range(-err, err))
+				p.pitch = rad_to_deg(asin(clampf(dir.normalized().y, -1.0, 1.0)))
+				_process_shot(pid, eye, dir)
+		else:
+			var g: Vector3 = p.ai_goal
+			dirv = Vector3(g.x - pos.x, 0.0, g.z - pos.z).normalized()
+			if (p.ai_side_t as float) > 0.0:
+				p.ai_side_t = float(p.ai_side_t) - delta
+				dirv = p.ai_side
+			if dirv.length() > 0.1:
+				p.yaw = lerp_angle(float(p.yaw), atan2(-dirv.x, -dirv.z), clampf(delta * 6.0, 0.0, 1.0))
+			p.pitch = 0.0
+		body.velocity.x = dirv.x * speed
+		body.velocity.z = dirv.z * speed
+		if not body.is_on_floor():
+			body.velocity.y -= 20.0 * delta
+		body.move_and_slide()
+		if body.global_position.y < float(World.cur.get("hmin", -20.0)) - 10.0:
+			body.global_position = spawn_point(int(p.team))
+		p.pos = body.global_position
+		p.flags = (4 if aiming else 0) | (64 if speed > 4.0 and dirv.length() > 0.1 else 0)
+
 
 
 # =====================================================================
@@ -1389,6 +1883,9 @@ func _clear_match() -> void:
 	for id in remote_drones:
 		remote_drones[id].queue_free()
 	remote_drones.clear()
+	for vid in vnodes:
+		vnodes[vid].queue_free()
+	vnodes.clear()
 	drone_targets.clear()
 	for pr in projectiles:
 		if is_instance_valid(pr.node):
@@ -1439,6 +1936,9 @@ func request_reload() -> void:
 
 func request_drone() -> void:
 	if not connected or not alive_local:
+		return
+	if my_role == "recon":
+		rpc_id(1, "srv_recon_start")
 		return
 	if soldier and soldier.drones <= 0:
 		show_hint("Немає дронів з собою. Купіть FPV-дрони і рюкзак у магазині.")
@@ -1518,6 +2018,7 @@ func _rebuild_client_world() -> void:
 		for id in remote_drones:
 			remote_drones[id].queue_free()
 		remote_drones.clear()
+		vnodes.clear()
 		projectiles.clear()
 		world.free()
 	world = null
@@ -1548,7 +2049,7 @@ func cl_lobby(data: Dictionary) -> void:
 func _auto_pick(data: Dictionary) -> void:
 	var teams: Array = data.get("teams", [[], []])
 	var t := 0 if teams[0].size() <= teams[1].size() else 1
-	var roles: Array = ["rifle", "fpv", "medic", "mg", "mortar", "eng", "radio", "cmd"]
+	var roles: Array = ["rifle", "fpv", "medic", "mg", "mortar", "eng", "radio", "recon"]
 	if is_bot:
 		roles.shuffle()
 	for r in roles:
@@ -1742,6 +2243,8 @@ func cl_snapshot(ids: PackedInt32Array, data: PackedFloat32Array) -> void:
 			a.target_yaw = data[b + 3]
 			a.visible = true
 		var mode := int(data[b + 5])
+		if avatars.has(id) and (mode & 256) != 0:
+			avatars[id].visible = false
 		if avatars.has(id):
 			var am = avatars[id].model
 			am.set_pose((mode & 2) != 0, (mode & 4) != 0)
@@ -1981,6 +2484,139 @@ func cl_round_start() -> void:
 		tophud.round_t = 0.0
 
 
+# ---------------------------------------------------------------- техніка (клієнт)
+
+@rpc("authority", "call_remote", "unreliable_ordered")
+func cl_vehicles(vd: PackedFloat32Array) -> void:
+	if world == null:
+		return
+	var k := 0
+	while k + 7 < vd.size():
+		var vid := int(vd[k])
+		var pos := Vector3(vd[k + 1], vd[k + 2], vd[k + 3])
+		var yaw := vd[k + 4]
+		if not vnodes.has(vid):
+			var v = Vehicle.new()
+			world.add_child(v)
+			v.setup(vid, int(vd[k + 7]), pos, yaw)
+			vnodes[vid] = v
+		vnodes[vid].net_update(pos, yaw, vd[k + 5], vd[k + 6] > 0.5)
+		k += 8
+
+
+@rpc("authority", "call_remote", "reliable")
+func cl_veh_seat(vid: int, pid: int, seat: int) -> void:
+	if vnodes.has(vid):
+		var v = vnodes[vid]
+		for si in v.seats.size():
+			if int(v.seats[si]) == pid:
+				v.seats[si] = 0
+		if seat >= 0:
+			v.seats[seat] = pid
+	if pid == my_id and soldier:
+		if seat >= 0:
+			soldier.enter_vehicle(vid, seat)
+			_show_center("Водій: джойстик — газ і поворот" if seat == 0 else "Ви пасажир. Вихід — кнопка праворуч", 2.5)
+		else:
+			soldier.exit_vehicle()
+	if is_bot:
+		print("[BOT] seat %d %d %d" % [vid, pid, seat])
+
+
+func nearest_vehicle(pos: Vector3) -> int:
+	var best := -1
+	var bd := 6.0
+	for vid in vnodes:
+		var v = vnodes[vid]
+		if not v.alive or int(v.team) != my_team:
+			continue
+		var d: float = (v.global_position as Vector3).distance_to(pos)
+		if d < bd:
+			bd = d
+			best = vid
+	return best
+
+
+func request_veh_enter(vid: int) -> void:
+	if connected and vid >= 0:
+		rpc_id(1, "srv_veh_enter", vid)
+
+
+func request_veh_exit() -> void:
+	if connected:
+		rpc_id(1, "srv_veh_exit")
+
+
+func send_veh_state(vid: int, pos: Vector3, yaw: float) -> void:
+	if connected:
+		rpc_id(1, "srv_veh_state", vid, pos, yaw)
+
+
+# ---------------------------------------------------------------- розвідка (клієнт)
+
+@rpc("authority", "call_remote", "reliable")
+func cl_recon_ok(pos: Vector3) -> void:
+	if soldier and alive_local:
+		soldier.start_drone(pos, true)
+		drone_time = RECON_LIFETIME
+		_show_center("Дрон-розвідник у повітрі. Кнопка «Позначити» — ціль для штурму", 3.0)
+		if is_bot:
+			print("[BOT] recon drone launched")
+
+
+func recon_mark(pos: Vector3) -> void:
+	if connected:
+		rpc_id(1, "srv_recon_mark", pos)
+
+
+@rpc("authority", "call_remote", "reliable")
+func cl_spot(ids: PackedInt32Array, secs: float) -> void:
+	var now := Time.get_ticks_msec() / 1000.0
+	for id in ids:
+		spotted[id] = maxf(float(spotted.get(id, 0.0)), now + secs)
+
+
+@rpc("authority", "call_remote", "reliable")
+func cl_waypoint(pos: Vector3, who: String) -> void:
+	waypoint = pos
+	waypoint_t = 45.0
+	_show_center("Розвідник %s позначив ціль" % who, 2.0)
+	Sfx.play(self, "buy", null, -6.0)
+	_update_wp_marker()
+
+
+var wp_marker: Node3D
+
+
+func _update_wp_marker() -> void:
+	if world == null:
+		return
+	if wp_marker == null or not is_instance_valid(wp_marker):
+		wp_marker = Node3D.new()
+		var beam := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.25
+		cm.bottom_radius = 0.25
+		cm.height = 60.0
+		beam.mesh = cm
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.albedo_color = Color(1.0, 0.25, 0.15, 0.45)
+		m.no_depth_test = true
+		beam.material_override = m
+		beam.position.y = 30.0
+		wp_marker.add_child(beam)
+		world.add_child(wp_marker)
+	wp_marker.global_position = waypoint
+	wp_marker.visible = waypoint_t > 0.0
+
+
+func is_spotted(id: int) -> bool:
+	return float(spotted.get(id, 0.0)) > Time.get_ticks_msec() / 1000.0
+
+
+
 @rpc("authority", "call_remote", "reliable")
 func cl_msg(text: String) -> void:
 	_show_center(text, 2.5)
@@ -2161,6 +2797,23 @@ func _process(delta: float) -> void:
 		touch.map_pressed = false
 		if bigmap:
 			open_bigmap()
+	if waypoint_t > 0.0:
+		waypoint_t -= delta
+		if waypoint_t <= 0.0 and wp_marker and is_instance_valid(wp_marker):
+			wp_marker.visible = false
+	if touch and soldier and alive_local:
+		touch.in_vehicle = soldier.in_veh >= 0
+		touch.veh_near = not touch.in_vehicle and not soldier.drone_active and nearest_vehicle(soldier.global_position) >= 0
+		touch.recon = my_role == "recon"
+		if touch.veh_pressed:
+			touch.veh_pressed = false
+			if soldier.in_veh >= 0:
+				request_veh_exit()
+			else:
+				request_veh_enter(nearest_vehicle(soldier.global_position))
+	elif touch:
+		touch.in_vehicle = false
+		touch.veh_near = false
 	if touch and touch.settings_pressed:
 		touch.settings_pressed = false
 		if settings_panel:

@@ -123,6 +123,30 @@ func _draw() -> void:
 			if full:
 				var font := ThemeDB.fallback_font
 				draw_string(font, _to_screen(r, av.position) + Vector2(8, 4), str(main.players[id].nick), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 1, 1, 0.9))
+	# вороги, яких бачить розвідник
+	for id in main.avatars:
+		if not main.players.has(id) or main.players[id].team == main.my_team:
+			continue
+		if main.is_spotted(id):
+			var ep := _to_screen(r, main.avatars[id].position)
+			draw_circle(ep, dot * 1.1, Color(1.0, 0.15, 0.1))
+			draw_arc(ep, dot * 1.9, 0.0, TAU, 12, Color(1.0, 0.3, 0.2, 0.7), 1.5)
+	# техніка
+	for vid in main.vnodes:
+		var vn = main.vnodes[vid]
+		if not vn.alive:
+			continue
+		var vp := _to_screen(r, vn.global_position)
+		var vc: Color = main.TEAM_COLORS[int(vn.team)] if int(vn.team) == main.my_team or main.is_spotted(-1000 - vid) else Color(0, 0, 0, 0)
+		if vc.a > 0.0:
+			draw_rect(Rect2(vp - Vector2(dot, dot * 0.7), Vector2(dot * 2.0, dot * 1.4)), vc)
+			draw_rect(Rect2(vp - Vector2(dot, dot * 0.7), Vector2(dot * 2.0, dot * 1.4)), Color(0, 0, 0, 0.8), false, 1.0)
+	# ціль від розвідника
+	if main.waypoint_t > 0.0:
+		var wp := _to_screen(r, main.waypoint)
+		var blink := 0.6 + 0.4 * sin(Time.get_ticks_msec() / 150.0)
+		draw_line(wp, wp + Vector2(0, -dot * 4.0), Color(1, 0.85, 0.2), 2.0)
+		draw_colored_polygon(PackedVector2Array([wp + Vector2(0, -dot * 4.0), wp + Vector2(dot * 2.6, -dot * 3.2), wp + Vector2(0, -dot * 2.4)]), Color(1, 0.3, 0.15, blink))
 	# я і мій дрон
 	var me = main.soldier
 	if me and main.alive_local:
@@ -142,7 +166,7 @@ func _draw() -> void:
 			draw_arc(mp, dot * 2.0, 0.0, TAU, 16, Color(1, 0.3, 0.2), 2.0)
 	if full:
 		var font := ThemeDB.fallback_font
-		draw_string(font, Vector2(r.position.x, r.end.y + 24.0), "Торкніться, щоб закрити", HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 20, Color(1, 1, 1, 0.8))
+		draw_string(font, Vector2(r.position.x, r.end.y + 24.0), "", HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 20, Color(1, 1, 1, 0.8))
 
 
 func _process(_delta: float) -> void:

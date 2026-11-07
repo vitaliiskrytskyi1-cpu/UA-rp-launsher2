@@ -3,10 +3,10 @@ extends RefCounted
 
 ## Команди і військові спеціалізації (ролі). Місця на роль у кожній команді.
 const TEAM_SIZE := 20
-const ROLE_ORDER := ["cmd", "mortar", "fpv", "medic", "rifle", "eng", "radio", "mg"]
+const ROLE_ORDER := ["recon", "mortar", "fpv", "medic", "rifle", "eng", "radio", "mg"]
 const ROLES := {
-	"cmd": {"name": "Командир", "slots": 1, "icon": "star", "desc": "Керує загоном. Посилена броня 4 класу, шолом і АК-74.",
-		"kit": {"w": "ak74", "a": "a4", "h": "h1"}, "free": {"mags": 2, "gren": 1}},
+	"recon": {"name": "Розвідник", "slots": 2, "icon": "recon", "desc": "Дрон-розвідник з камерою: керуєш ним, бачиш ворогів, позначаєш ціль — штурмовики бачать її на карті.",
+		"kit": {"w": "ak74", "h": "h1", "p": "m"}, "free": {"mags": 2, "gren": 1}},
 	"mortar": {"name": "Мінометник", "slots": 2, "icon": "mortar", "desc": "82-мм міномет і запас мін. Б'є по позиціях за 60–450 м.",
 		"kit": {"x": "mortar", "p": "m"}, "free": {"heavy": 4}},
 	"fpv": {"name": "Оператор FPV", "slots": 3, "icon": "drone", "desc": "Великий рюкзак і три FPV-дрони-камікадзе.",
