@@ -26,7 +26,7 @@ const RECON_LIFETIME := 180.0
 const BOT_NAMES := ["Сокіл", "Грім", "Вовк", "Тайфун", "Шершень", "Беркут", "Барс", "Скіф", "Яструб", "Сич", "Рись", "Буревій", "Кремінь", "Лис", "Граніт", "Ворон"]
 static var _fpv_scene: PackedScene
 
-const VERSION := 9
+const VERSION := 10
 const DEFAULT_ADDR := "147.185.221.217:11983"
 const DEFAULT_PORT := 7000
 const MAX_PLAYERS := 40
@@ -380,7 +380,8 @@ func _server_spawn(id: int) -> void:
 	p.armor_dur = 100.0
 	p.helm_dur = 100.0
 	p.pos = spawn_point(p.team)
-	p.yaw = PI if p.team == 0 else 0.0
+	var bp0 := World.base_pos(int(p.team))
+	p.yaw = atan2(bp0.x, bp0.y)
 	p.veh = -1
 	p.seat = -1
 	if p.ai:
@@ -1020,7 +1021,7 @@ func _process_shot(id: int, origin: Vector3, dir: Vector3) -> void:
 		if pid == id:
 			continue
 		var e: Dictionary = players[pid]
-		if not e.alive or e.team == p.team or int(e.veh) >= 0:
+		if not e.alive or e.team == p.team or _in_armor(e):
 			continue
 		for part in hit_parts(e):
 			var d := _ray_sphere(origin, dir, part[0], part[1])
@@ -1169,7 +1170,7 @@ func _explode(pos: Vector3, kid: int, team: int, radius: float, maxdmg: float, r
 		if not players.has(pid):
 			continue
 		var e: Dictionary = players[pid]
-		if not e.alive or e.team == team or int(e.veh) >= 0:
+		if not e.alive or e.team == team or _in_armor(e):
 			continue
 		if e.mode == 1 and e.dpos.distance_to(pos) < 4.0:
 			_end_drone(pid, true)
@@ -1272,7 +1273,7 @@ func _send_snapshot() -> void:
 		if not p.alive:
 			continue
 		ids.append(pid)
-		var m := int(p.mode) | (int(p.flags) & ~1) | (256 if int(p.veh) >= 0 else 0) | (512 if String(p.drone_kind) == "recon" else 0)
+		var m := int(p.mode) | (int(p.flags) & ~1) | (256 if _in_armor(p) else (1024 if int(p.veh) >= 0 else 0)) | (512 if String(p.drone_kind) == "recon" else 0)
 		var vals := [p.pos.x, p.pos.y, p.pos.z, p.yaw, p.pitch, float(m), p.dpos.x, p.dpos.y, p.dpos.z, p.dyaw, float(p.slot)]
 		for v in vals:
 			data.append(v)
@@ -1282,7 +1283,7 @@ func _send_snapshot() -> void:
 		var vd := PackedFloat32Array()
 		for vid in vehicles:
 			var v: Dictionary = vehicles[vid]
-			vd.append_array([float(vid), v.pos.x, v.pos.y, v.pos.z, float(v.yaw), float(v.hp), 1.0 if v.alive else 0.0, float(v.team)])
+			vd.append_array([float(vid), v.pos.x, v.pos.y, v.pos.z, float(v.yaw), float(v.hp), 1.0 if v.alive else 0.0, float(v.team), float(Vehicle.KIND_IDS.find(String(v.kind)))])
 		rpc("cl_vehicles", vd)
 
 
@@ -1393,13 +1394,18 @@ func _round_restart() -> void:
 #   СЕРВЕР: техніка (БТР М113)
 # =====================================================================
 
-func _veh_body(pos: Vector3, yaw: float) -> StaticBody3D:
+func _in_armor(e: Dictionary) -> bool:
+	var vid := int(e.veh)
+	return vid >= 0 and vehicles.has(vid) and bool(vehicles[vid].armored)
+
+
+func _veh_body(pos: Vector3, yaw: float, kind: String = "m113") -> StaticBody3D:
 	var b := StaticBody3D.new()
 	var cs := CollisionShape3D.new()
 	var bs := BoxShape3D.new()
-	bs.size = Vector3(3.0, 2.3, 5.3)
+	bs.size = Vehicle.KINDS[kind].box
 	cs.shape = bs
-	cs.position.y = 1.25
+	cs.position.y = bs.size.y * 0.5 + 0.1
 	b.add_child(cs)
 	world.add_child(b)
 	b.global_transform = Transform3D(Basis(Vector3.UP, yaw), pos)
@@ -1416,8 +1422,13 @@ func _spawn_vehicles() -> void:
 		var z := float(v.z)
 		var pos := Vector3(x, World.ground_y(world, x, z), z)
 		var yaw := float(v.yaw)
-		vehicles[k] = {"pos": pos, "yaw": yaw, "team": int(v.team), "seats": [0, 0, 0, 0, 0, 0], "hp": VEH_HP,
-			"alive": true, "respawn": 0.0, "home": pos, "home_yaw": yaw, "body": _veh_body(pos, yaw)}
+		var kind := String(v.get("kind", "m113"))
+		var kd: Dictionary = Vehicle.KINDS[kind]
+		var seats: Array = []
+		for si in int(kd.seats):
+			seats.append(0)
+		vehicles[k] = {"pos": pos, "yaw": yaw, "team": int(v.team), "seats": seats, "hp": float(kd.hp), "max_hp": float(kd.hp),
+			"kind": kind, "armored": bool(kd.armored), "alive": true, "respawn": 0.0, "home": pos, "home_yaw": yaw, "body": _veh_body(pos, yaw, kind)}
 		k += 1
 
 
@@ -1429,7 +1440,7 @@ func _reset_vehicles() -> void:
 				_veh_leave(int(v.seats[si]))
 		v.pos = v.home
 		v.yaw = v.home_yaw
-		v.hp = VEH_HP
+		v.hp = v.max_hp
 		v.alive = true
 		v.body.global_transform = Transform3D(Basis(Vector3.UP, v.yaw), v.pos)
 
@@ -1539,7 +1550,7 @@ func _update_vehicles(delta: float) -> void:
 			v.respawn = float(v.respawn) - delta
 			if v.respawn <= 0.0:
 				v.alive = true
-				v.hp = VEH_HP
+				v.hp = v.max_hp
 				v.pos = v.home
 				v.yaw = v.home_yaw
 				v.body.global_transform = Transform3D(Basis(Vector3.UP, v.yaw), v.pos)
@@ -1913,14 +1924,13 @@ func local_fire(origin: Vector3, dir: Vector3, muzzle: Vector3) -> void:
 	if connected:
 		rpc_id(1, "srv_fire", origin, dir)
 	_tracer(muzzle, origin + dir * 150.0)
-	var heavy: bool = soldier != null and (soldier.eq.w == "pkm" or soldier.eq.w == "svd")
-	Sfx.play(self, "shot_heavy" if heavy else "shot", null, -4.0, randf_range(0.95, 1.05))
+	Sfx.play(self, Sfx.shot_kind(soldier.eq.w if soldier else "ak74"), null, -3.0, randf_range(0.96, 1.04))
 
 
 func local_rpg(origin: Vector3, dir: Vector3) -> void:
 	if connected:
 		rpc_id(1, "srv_rpg", origin, dir)
-	Sfx.play(self, "shot_heavy", null, 0.0, 0.6)
+	Sfx.play(self, "rpg", null, 0.0, 1.0)
 
 
 func local_mortar(target: Vector3) -> void:
@@ -2245,6 +2255,8 @@ func cl_snapshot(ids: PackedInt32Array, data: PackedFloat32Array) -> void:
 		var mode := int(data[b + 5])
 		if avatars.has(id) and (mode & 256) != 0:
 			avatars[id].visible = false
+		if avatars.has(id) and (mode & 1024) != 0:
+			avatars[id].target_pos.y -= 0.0
 		if avatars.has(id):
 			var am = avatars[id].model
 			am.set_pose((mode & 2) != 0, (mode & 4) != 0)
@@ -2275,8 +2287,7 @@ func cl_snapshot(ids: PackedInt32Array, data: PackedFloat32Array) -> void:
 func cl_tracer(id: int, a: Vector3, b: Vector3, weapon: String) -> void:
 	if id != my_id:
 		_tracer(a + (b - a).normalized() * 0.8, b)
-		var heavy := weapon == "pkm" or weapon == "svd"
-		Sfx.play(world, "shot_heavy" if heavy else "shot", a, 0.0, randf_range(0.95, 1.05))
+		Sfx.play(world, Sfx.shot_kind(weapon), a, 2.0, randf_range(0.96, 1.04))
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -2294,7 +2305,7 @@ func cl_rocket(id: int, pos: Vector3, vel: Vector3) -> void:
 	mi.global_position = pos
 	projectiles.append({"node": mi, "vel": vel, "t": 0.0})
 	if id != my_id:
-		Sfx.play(world, "shot_heavy", pos, 2.0, 0.6)
+		Sfx.play(world, "rpg", pos, 4.0, 1.0)
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -2450,7 +2461,10 @@ func cl_drone_end(id: int, destroyed: bool, pos: Vector3) -> void:
 @rpc("authority", "call_remote", "reliable")
 func cl_boom(pos: Vector3, radius: float) -> void:
 	_boom_fx(pos, radius)
-	Sfx.play(world, "boom", pos, 6.0 if radius > 8.0 else 3.0, randf_range(0.9, 1.1))
+	Sfx.play(world, "boom", pos, 6.0 if radius > 8.0 else 3.0, randf_range(0.85, 1.05))
+	var lc := get_viewport().get_camera_3d()
+	if lc and lc.global_position.distance_to(pos) > 70.0:
+		Sfx.play(world, "boom_far", pos, 8.0, randf_range(0.9, 1.1))
 	# прибрати ракету, що вибухнула
 	var keep: Array = []
 	for pr in projectiles:
@@ -2491,17 +2505,17 @@ func cl_vehicles(vd: PackedFloat32Array) -> void:
 	if world == null:
 		return
 	var k := 0
-	while k + 7 < vd.size():
+	while k + 8 < vd.size():
 		var vid := int(vd[k])
 		var pos := Vector3(vd[k + 1], vd[k + 2], vd[k + 3])
 		var yaw := vd[k + 4]
 		if not vnodes.has(vid):
 			var v = Vehicle.new()
 			world.add_child(v)
-			v.setup(vid, int(vd[k + 7]), pos, yaw)
+			v.setup(vid, int(vd[k + 7]), pos, yaw, Vehicle.KIND_IDS[clampi(int(vd[k + 8]), 0, Vehicle.KIND_IDS.size() - 1)])
 			vnodes[vid] = v
 		vnodes[vid].net_update(pos, yaw, vd[k + 5], vd[k + 6] > 0.5)
-		k += 8
+		k += 9
 
 
 @rpc("authority", "call_remote", "reliable")

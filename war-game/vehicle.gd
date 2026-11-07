@@ -5,13 +5,22 @@ extends Node3D
 const World = preload("res://world.gd")
 const Sfx = preload("res://sfx.gd")
 
-const MAX_FWD := 13.0     # м/с (~47 км/год)
-const MAX_REV := 4.5
-const ACCEL := 5.0
+## Типи техніки: БТР М113 і квадроцикл.
+const KINDS := {
+	"m113": {"max_fwd": 13.0, "max_rev": 4.5, "accel": 5.0, "turn": 0.9, "hw": 1.35, "hl": 2.5, "box": Vector3(3.0, 2.3, 5.3),
+		"seats": 6, "hp": 600.0, "model": "res://models/m113.glb", "cam": 9.5, "eye": 0.6, "armored": true, "pitch": 0.32},
+	"atv": {"max_fwd": 19.0, "max_rev": 5.0, "accel": 9.0, "turn": 1.7, "hw": 0.6, "hl": 1.05, "box": Vector3(1.2, 1.1, 2.1),
+		"seats": 2, "hp": 160.0, "model": "res://models/atv.glb", "cam": 5.0, "eye": 0.55, "armored": false, "pitch": 0.6},
+}
+const KIND_IDS := ["m113", "atv"]
 const BRAKE := 9.0
-const TURN := 0.9         # рад/с
-const HALF_W := 1.35
-const HALF_L := 2.5
+var kind := "m113"
+var MAX_FWD := 13.0
+var MAX_REV := 4.5
+var ACCEL := 5.0
+var TURN := 0.9
+var HALF_W := 1.35
+var HALF_L := 2.5
 
 var vid := 0
 var team := 0
@@ -28,9 +37,21 @@ var seats := [0, 0, 0, 0, 0, 0]
 var _first := true
 
 
-func setup(id: int, t: int, pos: Vector3, yaw: float) -> void:
+func setup(id: int, t: int, pos: Vector3, yaw: float, k: String = "m113") -> void:
 	vid = id
 	team = t
+	kind = k if KINDS.has(k) else "m113"
+	var kd: Dictionary = KINDS[kind]
+	MAX_FWD = kd.max_fwd
+	MAX_REV = kd.max_rev
+	ACCEL = kd.accel
+	TURN = kd.turn
+	HALF_W = kd.hw
+	HALF_L = kd.hl
+	hp = kd.hp
+	seats = []
+	for i in int(kd.seats):
+		seats.append(0)
 	global_position = pos
 	rotation.y = yaw
 	target_pos = pos
@@ -38,29 +59,32 @@ func setup(id: int, t: int, pos: Vector3, yaw: float) -> void:
 	body = StaticBody3D.new()
 	var cs := CollisionShape3D.new()
 	var bs := BoxShape3D.new()
-	bs.size = Vector3(3.0, 2.3, 5.3)
+	bs.size = kd.box
 	cs.shape = bs
-	cs.position.y = 1.25
+	cs.position.y = bs.size.y * 0.5 + 0.1
 	body.add_child(cs)
 	add_child(body)
-	var ps = load("res://models/m113.glb") if ResourceLoader.exists("res://models/m113.glb") else null
+	var ps = load(String(kd.model)) if ResourceLoader.exists(String(kd.model)) else null
 	if ps:
 		model = ps.instantiate()
+		add_child(model)
+	elif kind == "atv":
+		model = _atv_fallback()
 		add_child(model)
 	# позначка команди: смуга на борту
 	var strip := MeshInstance3D.new()
 	var bm := BoxMesh.new()
-	bm.size = Vector3(3.08, 0.18, 1.2)
+	bm.size = Vector3(3.08, 0.18, 1.2) if kind == "m113" else Vector3(0.5, 0.06, 0.5)
 	strip.mesh = bm
 	var sm := StandardMaterial3D.new()
 	sm.albedo_color = Color(0.25, 0.5, 1.0) if team == 0 else Color(1.0, 0.8, 0.15)
 	strip.material_override = sm
-	strip.position = Vector3(0.0, 1.75, 0.0)
+	strip.position = Vector3(0.0, 1.75, 0.0) if kind == "m113" else Vector3(0.0, 0.95, 0.75)
 	add_child(strip)
 	if DisplayServer.get_name() != "headless":
 		engine = AudioStreamPlayer3D.new()
 		engine.stream = Sfx.get_sound("drone")
-		engine.pitch_scale = 0.32
+		engine.pitch_scale = float(kd.pitch)
 		engine.unit_size = 8.0
 		engine.max_distance = 140.0
 		engine.volume_db = -8.0
@@ -97,7 +121,7 @@ func drive(mv: Vector2, delta: float) -> void:
 		var sgn := signf(speed)
 		var side := Vector3(dir.z, 0.0, -dir.x)
 		for k in [-1.0, 0.0, 1.0]:
-			var from: Vector3 = global_position + Vector3(0.0, 1.3, 0.0) + side * HALF_W * float(k) * 0.9
+			var from: Vector3 = global_position + Vector3(0.0, 0.6 if kind == "atv" else 1.3, 0.0) + side * HALF_W * float(k) * 0.9
 			var to: Vector3 = from + dir * sgn * (HALF_L + 0.4 + absf(speed) * delta)
 			var q := PhysicsRayQueryParameters3D.create(from, to)
 			q.collision_mask = 1
@@ -181,4 +205,37 @@ func _process(delta: float) -> void:
 			engine.play()
 		elif not busy and engine.playing:
 			engine.stop()
-		engine.pitch_scale = 0.3 + absf(speed) / MAX_FWD * 0.35
+		engine.pitch_scale = float(KINDS[kind].pitch) * (0.95 + absf(speed) / MAX_FWD * 1.1)
+
+
+## Простий квадроцикл, поки немає моделі (рама, 4 колеса, кермо, сидіння).
+func _atv_fallback() -> Node3D:
+	var root := Node3D.new()
+	var body_m := StandardMaterial3D.new()
+	body_m.albedo_color = Color(0.25, 0.3, 0.18)
+	var dark := StandardMaterial3D.new()
+	dark.albedo_color = Color(0.06, 0.06, 0.06)
+	var parts := [[Vector3(1.0, 0.35, 1.7), Vector3(0, 0.65, 0), body_m], [Vector3(0.5, 0.18, 0.7), Vector3(0, 0.92, 0.25), dark],
+		[Vector3(1.1, 0.12, 0.55), Vector3(0, 0.88, -0.75), body_m], [Vector3(1.1, 0.12, 0.5), Vector3(0, 0.88, 0.8), body_m],
+		[Vector3(0.75, 0.05, 0.05), Vector3(0, 1.12, -0.45), dark]]
+	for p in parts:
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = p[0]
+		mi.mesh = bm
+		mi.material_override = p[2]
+		mi.position = p[1]
+		root.add_child(mi)
+	for wx in [-0.55, 0.55]:
+		for wz in [-0.7, 0.72]:
+			var w := MeshInstance3D.new()
+			var cm := CylinderMesh.new()
+			cm.top_radius = 0.3
+			cm.bottom_radius = 0.3
+			cm.height = 0.28
+			w.mesh = cm
+			w.material_override = dark
+			w.rotation.z = PI * 0.5
+			w.position = Vector3(wx, 0.3, wz)
+			root.add_child(w)
+	return root

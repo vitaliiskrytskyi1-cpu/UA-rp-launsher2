@@ -17,7 +17,7 @@ const Settings = preload("res://settings.gd")
 ## Карти. «field» — генерована лінія фронту, решта — 3D-скани хуторів Фарерських островів
 ## (Національний музей Фарер, CC0). half — половина розміру, base — відстань баз від центру.
 const MAPS := [
-	{"id": "front", "name": "Фронт", "file": "front", "half": 200.0, "hz": 200.0, "b0": Vector2(0.0, -172.0), "b1": Vector2(0.0, 172.0), "base_r": 20.0, "cap": 14.0, "hmin": -12.0},
+	{"id": "front", "name": "Поле бою", "file": "front", "half": 300.0, "hz": 300.0, "b0": Vector2(-255.0, 0.0), "b1": Vector2(255.0, 0.0), "base_r": 26.0, "cap": 14.0, "hmin": -12.0},
 ]
 const Front = preload("res://front.gd")
 static var cur: Dictionary = MAPS[0]

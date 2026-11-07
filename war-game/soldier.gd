@@ -557,13 +557,21 @@ func _vehicle_process(delta: float, mv: Vector2, look: Vector2) -> void:
 		if veh_send_t <= 0.0:
 			veh_send_t = 0.05
 			main.send_veh_state(in_veh, v.global_position, v.rotation.y)
-	global_position = v.global_position + Vector3(0.0, 0.6, 0.0)
+	var armored: bool = v.KINDS[v.kind].armored
+	if armored:
+		global_position = v.global_position + Vector3(0.0, 0.6, 0.0)
+	else:
+		# на квадроциклі боєць сидить верхи і видно його
+		var back := 0.15 if veh_seat == 0 else 0.75
+		global_position = v.global_position + v.global_transform.basis * Vector3(0.0, 0.35, back)
+		model.global_rotation = Vector3(0.0, v.global_rotation.y, 0.0)
+		model.set_pose(true, false)
 	velocity = Vector3.ZERO
 	model.animate(0.0, delta)
 	send_t -= delta
 	if send_t <= 0.0:
 		send_t = SEND_RATE
-		main.send_state(global_position, rotation.y, head.rotation.x, 256, Vector3.ZERO, 0.0)
+		main.send_state(global_position, v.rotation.y if not armored else rotation.y, head.rotation.x, 256 if armored else (1024 | 2), Vector3.ZERO, 0.0)
 
 
 func enter_vehicle(vid: int, seat: int) -> void:
@@ -572,9 +580,15 @@ func enter_vehicle(vid: int, seat: int) -> void:
 	in_veh = vid
 	veh_seat = seat
 	col_shape.disabled = true
-	model.visible = false
-	arm.spring_length = 9.5
-	arm.position = Vector3(0.0, 1.6, 0.0)
+	var vk = main.vnodes.get(vid)
+	var armored := true
+	var camd := 9.5
+	if vk:
+		armored = vk.KINDS[vk.kind].armored
+		camd = float(vk.KINDS[vk.kind].cam)
+	model.visible = not armored
+	arm.spring_length = camd
+	arm.position = Vector3(0.0, 1.6 if armored else 0.9, 0.0)
 	pitch = -12.0
 	var v = main.vnodes.get(vid)
 	if v:
@@ -597,6 +611,8 @@ func exit_vehicle() -> void:
 	veh_seat = -1
 	col_shape.disabled = false
 	model.visible = true
+	model.rotation = Vector3.ZERO
+	model.set_pose(false, false)
 	arm.spring_length = 2.7
 	arm.position = Vector3(_cam_x, 0.2, 0.0)
 	if touch:

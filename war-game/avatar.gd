@@ -9,6 +9,7 @@ var model: Node3D
 var _first := true
 var _last_pos := Vector3.ZERO
 var _speed := 0.0
+var _anim_acc := 0.0
 
 
 func setup(nick: String, team_color: Color, model_id: int = 0) -> void:
@@ -50,7 +51,17 @@ func _process(delta: float) -> void:
 			model.move_local = Vector2(lv.x, -lv.z)
 	_last_pos = position
 	if model:
-		model.animate(_speed, delta)
+		# оптимізація: далекі бійці анімуються рідше, дуже далекі — ховаються
+		_anim_acc += delta
+		var cam := get_viewport().get_camera_3d()
+		var d := 0.0
+		if cam:
+			d = cam.global_position.distance_to(global_position)
+		model.visible = d < 260.0
+		var every := 0.0 if d < 25.0 else (0.033 if d < 60.0 else (0.066 if d < 140.0 else 0.15))
+		if model.visible and _anim_acc >= every:
+			model.animate(_speed, _anim_acc)
+			_anim_acc = 0.0
 
 
 func snap_to(pos: Vector3, yaw: float) -> void:

@@ -8,3 +8,9 @@ UA War Front — джерела ресурсів
 
 Карти Ґротхустанґі, Гейма-ї-Гусі, Лейрвік, Депіль: 3D-скани Національного музею Фарерських островів (sketchfab.com/Savn), ліцензія CC0.
 Модель військової аптечки: надана власником проєкту.
+
+Звуки (вільна ліцензія CC0, OpenGameArt.org):
+- The Free Firearm Sound Library — постріли АК-47, AR-15, Tikka, Mosin, Carl Gustav M45
+- NenadSimic — Muffled Distant Explosion; synthesized explosion; 100 CC0 SFX (explosion)
+- Rocket launch (CC0); Gun reload sounds (CC0); [kdd] Different Steps (CC0)
+Карта «Поле бою» — за заготовкою гравця (Battlefield_Godot4_Realistic).

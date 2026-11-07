@@ -52,9 +52,14 @@ func _map_rect() -> Rect2:
 
 
 func _to_screen(r: Rect2, p: Vector3) -> Vector2:
-	var flip := 1.0 if main.my_team == 1 else -1.0
 	var k := r.size.x / (span() * 2.0)
-	return r.position + r.size * 0.5 + Vector2(p.x * flip, p.z * flip) * k
+	return r.position + r.size * 0.5 + Vector2(p.x, p.z).rotated(_rot()) * k
+
+
+## Поворот карти: своя база завжди внизу.
+func _rot() -> float:
+	var b := World.base_pos(clampi(main.my_team, 0, 1))
+	return PI * 0.5 - atan2(b.y, b.x)
 
 
 func _draw() -> void:
@@ -75,9 +80,8 @@ func _draw() -> void:
 			_tex_id = String(World.cur.id)
 			_tex = load("res://maps/%s_top.png" % World.cur.file)
 		if _tex:
-			var flip := 1.0 if main.my_team == 1 else -1.0
 			var c := r.position + r.size * 0.5
-			draw_set_transform(c, 0.0 if flip > 0.0 else PI, Vector2.ONE)
+			draw_set_transform(c, _rot(), Vector2.ONE)
 			draw_texture_rect(_tex, Rect2(-r.size * 0.5, r.size), false, Color(1, 1, 1, 0.9))
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var rows := []
@@ -151,9 +155,8 @@ func _draw() -> void:
 	var me = main.soldier
 	if me and main.alive_local:
 		var p := _to_screen(r, me.global_position)
-		var flip := 1.0 if main.my_team == 1 else -1.0
 		var yaw: float = me.rotation.y
-		var fwd := Vector2(-sin(yaw), -cos(yaw)) * flip
+		var fwd := Vector2(-sin(yaw), -cos(yaw)).rotated(_rot())
 		var side := Vector2(-fwd.y, fwd.x)
 		var s2 := 9.0 if full else 6.0
 		draw_colored_polygon(PackedVector2Array([p + fwd * s2 * 1.4, p - fwd * s2 * 0.8 + side * s2 * 0.8, p - fwd * s2 * 0.4, p - fwd * s2 * 0.8 - side * s2 * 0.8]), Color(1, 1, 1))

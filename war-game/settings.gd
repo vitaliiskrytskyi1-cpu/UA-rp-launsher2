@@ -61,8 +61,15 @@ static func apply(tree: SceneTree) -> void:
 	vp.mesh_lod_threshold = [4.0, 1.5, 1.0][clampi(q, 0, 2)]
 	vp.texture_mipmap_bias = [1.0, 0.0, -0.5][clampi(int(value("graphics", "textures")), 0, 2)]
 	var shadows := int(value("graphics", "shadows")) == 1
+	RenderingServer.directional_shadow_atlas_set_size([1024, 2048, 4096][clampi(q, 0, 2)], true)
 	for s in tree.get_nodes_in_group("sun"):
-		(s as DirectionalLight3D).shadow_enabled = shadows
+		var sun := s as DirectionalLight3D
+		sun.shadow_enabled = shadows
+		sun.directional_shadow_max_distance = [35.0, 55.0, 90.0][clampi(q, 0, 2)]
+		sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL if q == 0 else DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	var cam := vp.get_camera_3d()
+	if cam:
+		cam.far = [260.0, 380.0, 520.0][clampi(q, 0, 2)]
 	var gr := float(value("graphics", "grass"))
 	for g in tree.get_nodes_in_group("grass"):
 		(g as GeometryInstance3D).visible = gr > 0.05

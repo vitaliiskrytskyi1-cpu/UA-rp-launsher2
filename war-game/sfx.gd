@@ -1,16 +1,42 @@
 extends RefCounted
-## Звуки, синтезовані в коді (без сторонніх файлів).
+## Звуки: справжні записи з res://sounds (вільна ліцензія CC0, OpenGameArt / The Free Firearm
+## Sound Library); якщо файлу немає — синтезований звук.
 
 const RATE := 22050
 static var _cache := {}
 
 
-static func get_sound(kind: String) -> AudioStreamWAV:
+static var _variants := {}
+
+
+static func get_sound(kind: String) -> AudioStream:
+	# записані варіанти: res://sounds/<kind>_1.ogg, _2.ogg ... (випадковий)
+	if not _variants.has(kind):
+		var arr: Array = []
+		for i in range(1, 9):
+			var p := "res://sounds/%s_%d.ogg" % [kind, i]
+			if ResourceLoader.exists(p):
+				arr.append(load(p))
+		_variants[kind] = arr
+	var v: Array = _variants[kind]
+	if not v.is_empty():
+		return v[randi() % v.size()]
 	if _cache.has(kind):
 		return _cache[kind]
 	var s := _make(kind)
 	_cache[kind] = s
 	return s
+
+
+## Звук пострілу для зброї.
+static func shot_kind(weapon: String) -> String:
+	match weapon:
+		"ak74": return "shot_ak"
+		"aks74u": return "shot_aks"
+		"m4": return "shot_m4"
+		"svd": return "shot_svd"
+		"pkm": return "shot_pkm"
+	return "shot_ak"
 
 
 static func _make(kind: String) -> AudioStreamWAV:
@@ -99,7 +125,7 @@ static func play(parent: Node, kind: String, pos = null, volume_db: float = 0.0,
 		a3.stream = get_sound(kind)
 		a3.volume_db = volume_db
 		a3.pitch_scale = pitch
-		a3.unit_size = 12.0
+		a3.unit_size = 14.0 if kind.begins_with("shot") or kind.begins_with("boom") or kind == "rpg" else 6.0
 		a3.bus = "SFX" if AudioServer.get_bus_index("SFX") >= 0 else "Master"
 		a3.max_distance = 400.0
 		p = a3
