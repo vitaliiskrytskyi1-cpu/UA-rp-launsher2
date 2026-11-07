@@ -1,0 +1,100 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+export: begin: Exporting for Android steps: 105
+ERROR: No project icon specified. Please specify one in the Project Settings under Application -> Config -> Icon
+   at: load_icon_refs (platform/android/export/export_plugin.cpp:1656)
+0 param: --xr_mode_regular
+1 param: --use_immersive
+	export: step 0: Creating APK...
+ADDING: classes.dex
+ADDING: classes2.dex
+ADDING: classes3.dex
+ADDING: classes4.dex
+ADDING: lib/arm64-v8a/libc++_shared.so
+ADDING: lib/arm64-v8a/libgodot_android.so
+ADDING: lib/armeabi-v7a/libc++_shared.so
+ADDING: lib/armeabi-v7a/libgodot_android.so
+ADDING: DebugProbesKt.bin
+ADDING: kotlin/annotation/annotation.kotlin_builtins
+ADDING: kotlin/collections/collections.kotlin_builtins
+ADDING: kotlin/coroutines/coroutines.kotlin_builtins
+ADDING: kotlin/internal/internal.kotlin_builtins
+ADDING: kotlin/kotlin.kotlin_builtins
+ADDING: kotlin/ranges/ranges.kotlin_builtins
+ADDING: kotlin/reflect/reflect.kotlin_builtins
+Adding permission android.permission.ACCESS_NETWORK_STATE
+Adding permission android.permission.INTERNET
+ADDING: AndroidManifest.xml
+ADDING: res/anim-v21/fragment_fast_out_extra_slow_in.xml
+ADDING: res/animator/fragment_close_enter.xml
+ADDING: res/animator/fragment_close_exit.xml
+ADDING: res/animator/fragment_fade_enter.xml
+ADDING: res/animator/fragment_fade_exit.xml
+ADDING: res/animator/fragment_open_enter.xml
+ADDING: res/animator/fragment_open_exit.xml
+ADDING: res/drawable-hdpi-v4/notification_bg_low_normal.9.png
+ADDING: res/drawable-hdpi-v4/notification_bg_low_pressed.9.png
+ADDING: res/drawable-hdpi-v4/notification_bg_normal.9.png
+ADDING: res/drawable-hdpi-v4/notification_bg_normal_pressed.9.png
+ADDING: res/drawable-hdpi-v4/notify_panel_notification_icon_bg.png
+ADDING: res/drawable-mdpi-v4/notification_bg_low_normal.9.png
+ADDING: res/drawable-mdpi-v4/notification_bg_low_pressed.9.png
+ADDING: res/drawable-mdpi-v4/notification_bg_normal.9.png
+ADDING: res/drawable-mdpi-v4/notification_bg_normal_pressed.9.png
+ADDING: res/drawable-mdpi-v4/notify_panel_notification_icon_bg.png
+ADDING: res/drawable-v21/notification_action_background.xml
+ADDING: res/drawable-v23/compat_splash_screen.xml
+ADDING: res/drawable-v23/compat_splash_screen_no_icon_background.xml
+ADDING: res/drawable-xhdpi-v4/notification_bg_low_normal.9.png
+ADDING: res/drawable-xhdpi-v4/notification_bg_low_pressed.9.png
+ADDING: res/drawable-xhdpi-v4/notification_bg_normal.9.png
+ADDING: res/drawable-xhdpi-v4/notification_bg_normal_pressed.9.png
+ADDING: res/drawable-xhdpi-v4/notify_panel_notification_icon_bg.png
+ADDING: res/drawable/compat_splash_screen.xml
+ADDING: res/drawable/compat_splash_screen_no_icon_background.xml
+ADDING: res/drawable/icon_background.xml
+ADDING: res/drawable/notification_bg.xml
+ADDING: res/drawable/notification_bg_low.xml
+ADDING: res/drawable/notification_icon_background.xml
+ADDING: res/drawable/notification_tile_bg.xml
+ADDING: res/layout-v21/notification_action.xml
+ADDING: res/layout-v21/notification_action_tombstone.xml
+ADDING: res/layout-v21/notification_template_custom_big.xml
+ADDING: res/layout-v21/notification_template_icon_group.xml
+ADDING: res/layout/custom_dialog.xml
+ADDING: res/layout/downloading_expansion.xml
+ADDING: res/layout/godot_app_layout.xml
+ADDING: res/layout/notification_template_part_chronometer.xml
+ADDING: res/layout/notification_template_part_time.xml
+ADDING: res/layout/splash_screen_view.xml
+ADDING: res/layout/status_bar_ongoing_event_progress_bar.xml
+ADDING: res/mipmap-anydpi-v26/icon.xml
+ADDING: res/mipmap-hdpi-v4/icon.png
+ADDING: res/mipmap-hdpi-v4/icon_background.png
+ADDING: res/mipmap-hdpi-v4/icon_foreground.png
+ADDING: res/mipmap-mdpi-v4/icon.png
+ADDING: res/mipmap-mdpi-v4/icon_background.png
+ADDING: res/mipmap-mdpi-v4/icon_foreground.png
+ADDING: res/mipmap-xhdpi-v4/icon.png
+ADDING: res/mipmap-xhdpi-v4/icon_background.png
+ADDING: res/mipmap-xhdpi-v4/icon_foreground.png
+ADDING: res/mipmap-xxhdpi-v4/icon.png
+ADDING: res/mipmap-xxhdpi-v4/icon_background.png
+ADDING: res/mipmap-xxhdpi-v4/icon_foreground.png
+ADDING: res/mipmap-xxxhdpi-v4/icon.png
+ADDING: res/mipmap-xxxhdpi-v4/icon_background.png
+ADDING: res/mipmap-xxxhdpi-v4/icon_foreground.png
+ADDING: res/mipmap/icon.png
+ADDING: res/mipmap/icon_background.png
+ADDING: res/mipmap/icon_foreground.png
+ADDING: res/xml/godot_provider_paths.xml
+ADDING: resources.arsc
+	export: step 1: Adding files...
+	export: step 103: Aligning APK...
+	export: step 104: Signing debug APK...
+Signing binary using: 
+/usr/local/lib/android/sdk/build-tools/34.0.0/apksigner sign --verbose --ks <REDACTED> --ks-pass pass:<REDACTED> --ks-key-alias <REDACTED> build/UAWarFront.apk
+Signed
+
+	export: step 105: Verifying APK...
+export: end
