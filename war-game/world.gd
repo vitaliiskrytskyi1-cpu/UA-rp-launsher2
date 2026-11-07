@@ -13,6 +13,233 @@ const TRENCH_X := 140.0
 
 static var _mats := {}
 
+## Карти. «field» — генерована лінія фронту, решта — 3D-скани хуторів Фарерських островів
+## (Національний музей Фарер, CC0). half — половина розміру, base — відстань баз від центру.
+const MAPS := [
+	{"id": "field", "name": "Лінія фронту", "half": 150.0, "hz": 150.0, "base": 120.0, "base_r": 32.0, "cap": 14.0},
+	{"id": "groth", "name": "Ґротхустанґі", "file": "groth", "half": 38.9, "hz": 59.7, "b0": Vector2(0.0, -46.0), "b1": Vector2(0.0, 46.0), "base_r": 12.0, "cap": 9.0, "hmin": -10.2},
+	{"id": "heima", "name": "Гейма-ї-Гусі", "file": "heima", "half": 45.4, "hz": 52.0, "b0": Vector2(-7.8, -26.0), "b1": Vector2(7.8, 26.0), "base_r": 9.0, "cap": 8.0, "hmin": -7.5},
+	{"id": "leirvik", "name": "Лейрвік", "file": "leirvik", "half": 121.0, "hz": 110.5, "b0": Vector2(0.0, -54.0), "b1": Vector2(18.0, 78.0), "base_r": 16.0, "cap": 11.0, "hmin": -9.0},
+	{"id": "depil", "name": "Депіль", "file": "depil", "half": 116.4, "hz": 103.1, "b0": Vector2(-11.6, -70.0), "b1": Vector2(11.6, 75.0), "base_r": 16.0, "cap": 11.0, "hmin": -18.0},
+]
+static var cur: Dictionary = MAPS[0]
+static var cur_index := 0
+## Груба карта висот (сітка 1 м) — для точок появи без запитів до фізики.
+static var _hgrid := PackedFloat32Array()
+static var _hw := 0
+static var _hh := 0
+static var _hx0 := 0.0
+static var _hz0 := 0.0
+
+
+static func map_count() -> int:
+	return MAPS.size()
+
+
+## Центр бази команди (x, z).
+static func base_pos(team: int) -> Vector2:
+	var k := "b%d" % team
+	if cur.has(k):
+		return cur[k]
+	var bz := float(cur.get("base", 120.0))
+	return Vector2(0.0, -bz if team == 0 else bz)
+
+
+## Висота землі в точці (x, z) за колізією світу; якщо землі немає — fallback.
+static func ground_y(w: Node3D, x: float, z: float, fallback: float = 0.0) -> float:
+	if cur.has("file") and _hw > 0:
+		var gx := int(floor(x - _hx0))
+		var gz := int(floor(z - _hz0))
+		if gx >= 0 and gz >= 0 and gx < _hw and gz < _hh:
+			var v := _hgrid[gz * _hw + gx]
+			if v > -9000.0:
+				return v
+		return fallback
+	if w == null or not w.is_inside_tree():
+		return fallback
+	var q := PhysicsRayQueryParameters3D.create(Vector3(x, 300.0, z), Vector3(x, -300.0, z))
+	q.collision_mask = 1
+	var hit := w.get_world_3d().direct_space_state.intersect_ray(q)
+	if hit.is_empty():
+		return fallback
+	return hit.position.y
+
+
+static func _env(w: Node3D, fog: float) -> void:
+	var env := Environment.new()
+	env.background_mode = Environment.BG_SKY
+	var sky := Sky.new()
+	var psm := ProceduralSkyMaterial.new()
+	psm.sky_top_color = Color(0.38, 0.52, 0.7)
+	psm.sky_horizon_color = Color(0.72, 0.75, 0.78)
+	psm.ground_horizon_color = Color(0.55, 0.55, 0.5)
+	psm.ground_bottom_color = Color(0.3, 0.3, 0.26)
+	psm.sun_angle_max = 20.0
+	sky.sky_material = psm
+	env.sky = sky
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	env.ambient_light_energy = 0.85
+	env.fog_enabled = true
+	env.fog_light_color = Color(0.68, 0.71, 0.74)
+	env.fog_density = fog
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.tonemap_exposure = 1.05
+	var we := WorldEnvironment.new()
+	we.environment = env
+	w.add_child(we)
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-42.0, 35.0, 0.0)
+	sun.light_energy = 1.25
+	sun.light_color = Color(1.0, 0.95, 0.86)
+	sun.shadow_enabled = true
+	sun.directional_shadow_max_distance = 60.0
+	w.add_child(sun)
+
+
+static func _no_shadows(n: Node) -> void:
+	if n is GeometryInstance3D:
+		(n as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	if n is MeshInstance3D and (n as MeshInstance3D).mesh:
+		var mi := n as MeshInstance3D
+		for si in mi.mesh.get_surface_count():
+			var m := mi.get_active_material(si)
+			if m is StandardMaterial3D:
+				var sm := m as StandardMaterial3D
+				sm.metallic = 0.0
+				sm.metallic_specular = 0.12
+				sm.roughness = 1.0
+				sm.albedo_color = Color(0.86, 0.86, 0.84)
+	for c in n.get_children():
+		_no_shadows(c)
+
+
+## Карта зі скану: рельєф і будівлі — зі скану, колізія — зі спрощеної копії (файл .bin).
+static func _build_scan(parent: Node, visuals: bool) -> Node3D:
+	var w := Node3D.new()
+	w.name = "World"
+	parent.add_child(w)
+	var file: String = cur.file
+	var f := FileAccess.open("res://maps/%s_col.bin" % file, FileAccess.READ)
+	if f:
+		var n := f.get_32()
+		var faces := PackedVector3Array()
+		faces.resize(n * 3)
+		for i in n * 3:
+			faces[i] = Vector3(f.get_float(), f.get_float(), f.get_float())
+		f.close()
+		_build_hgrid(faces)
+		var sh := ConcavePolygonShape3D.new()
+		sh.backface_collision = true
+		sh.set_faces(faces)
+		_col_shape(w, sh, Vector3.ZERO)
+	else:
+		push_warning("map collision missing: " + file)
+		_col_box(w, Vector3(400.0, 2.0, 400.0), Vector3(0.0, -1.0, 0.0))
+	# невидимі межі карти
+	var hx: float = cur.half
+	var hz: float = cur.hz
+	for s in [-1.0, 1.0]:
+		_col_box(w, Vector3(1.0, 300.0, hz * 2.0), Vector3(s * (hx - 1.5), 0.0, 0.0))
+		_col_box(w, Vector3(hx * 2.0, 300.0, 1.0), Vector3(0.0, 0.0, s * (hz - 1.5)))
+	if visuals:
+		_env(w, 0.004)
+		var we := w.get_child(w.get_child_count() - 2) as WorldEnvironment
+		if we:
+			we.environment.tonemap_exposure = 0.92
+			we.environment.ambient_light_energy = 0.7
+		var scn = load("res://maps/%s.glb" % file)
+		if scn:
+			var terrain: Node3D = scn.instantiate()
+			w.add_child(terrain)
+			_no_shadows(terrain)
+		# море/долина навколо, щоб не було порожнечі за краєм
+		var sea := MeshInstance3D.new()
+		var pm := PlaneMesh.new()
+		pm.size = Vector2(1600.0, 1600.0)
+		sea.mesh = pm
+		var sm := StandardMaterial3D.new()
+		sm.albedo_color = Color(0.13, 0.22, 0.27)
+		sm.roughness = 0.25
+		sm.metallic = 0.3
+		sea.material_override = sm
+		sea.position.y = float(cur.get("hmin", -10.0)) - 2.0
+		w.add_child(sea)
+	return w
+
+
+static func _build_hgrid(faces: PackedVector3Array) -> void:
+	var hx: float = cur.half
+	var hz: float = cur.hz
+	_hx0 = -hx
+	_hz0 = -hz
+	_hw = int(ceil(hx * 2.0)) + 1
+	_hh = int(ceil(hz * 2.0)) + 1
+	_hgrid = PackedFloat32Array()
+	_hgrid.resize(_hw * _hh)
+	_hgrid.fill(-9999.0)
+	var i := 0
+	while i + 2 < faces.size():
+		var a := faces[i]
+		var b := faces[i + 1]
+		var c := faces[i + 2]
+		i += 3
+		var y := maxf(a.y, maxf(b.y, c.y))
+		var x0 := int(floor(minf(a.x, minf(b.x, c.x)) - _hx0))
+		var x1 := int(floor(maxf(a.x, maxf(b.x, c.x)) - _hx0))
+		var z0 := int(floor(minf(a.z, minf(b.z, c.z)) - _hz0))
+		var z1 := int(floor(maxf(a.z, maxf(b.z, c.z)) - _hz0))
+		for gz in range(maxi(z0, 0), mini(z1, _hh - 1) + 1):
+			for gx in range(maxi(x0, 0), mini(x1, _hw - 1) + 1):
+				var k := gz * _hw + gx
+				if y > _hgrid[k]:
+					_hgrid[k] = y
+
+
+## Позначки баз і кільце точки захоплення (після того, як світ у дереві сцени).
+static func decorate_scan(w: Node3D, visuals: bool) -> void:
+	if not visuals:
+		return
+	var cy := ground_y(w, 0.0, 0.0)
+	var ring := MeshInstance3D.new()
+	ring.name = "CapRing"
+	var rm := CylinderMesh.new()
+	rm.top_radius = float(cur.cap)
+	rm.bottom_radius = float(cur.cap)
+	rm.height = 0.08
+	rm.radial_segments = 48
+	ring.mesh = rm
+	var rmat := StandardMaterial3D.new()
+	rmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	rmat.albedo_color = Color(1, 1, 1, 0.25)
+	ring.material_override = rmat
+	ring.position = Vector3(0.0, cy + 0.3, 0.0)
+	w.add_child(ring)
+	var cols := [Color(0.25, 0.5, 1.0), Color(1.0, 0.8, 0.15)]
+	for t in 2:
+		var bp := base_pos(t)
+		var bz := bp.y
+		var by := ground_y(w, bp.x, bz)
+		var pole := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.06
+		cm.bottom_radius = 0.06
+		cm.height = 6.0
+		pole.mesh = cm
+		pole.position = Vector3(bp.x + 2.5, by + 3.0, bz)
+		w.add_child(pole)
+		var flag := MeshInstance3D.new()
+		var fm := BoxMesh.new()
+		fm.size = Vector3(1.6, 1.0, 0.04)
+		flag.mesh = fm
+		var fmat := StandardMaterial3D.new()
+		fmat.albedo_color = cols[t]
+		fmat.emission_enabled = true
+		fmat.emission = cols[t] * 0.3
+		flag.material_override = fmat
+		flag.position = Vector3(bp.x + 3.35, by + 5.4, bz)
+		w.add_child(flag)
+
 
 static func tex_mat(name: String, fallback: Color, scale: float = 0.25, tint: Color = Color(1, 1, 1)) -> StandardMaterial3D:
 	var key := "%s|%s|%s" % [name, str(scale), str(tint)]
@@ -93,7 +320,11 @@ static func _multi(parent: Node3D, mesh: Mesh, mat: Material, xforms: Array) -> 
 	parent.add_child(mmi)
 
 
-static func build(parent: Node, visuals: bool) -> Node3D:
+static func build(parent: Node, visuals: bool, map_idx: int = 0) -> Node3D:
+	cur_index = clampi(map_idx, 0, MAPS.size() - 1)
+	cur = MAPS[cur_index]
+	if cur.has("file"):
+		return _build_scan(parent, visuals)
 	var w := Node3D.new()
 	w.name = "World"
 	parent.add_child(w)

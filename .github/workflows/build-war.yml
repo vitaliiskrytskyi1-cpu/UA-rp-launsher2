@@ -66,7 +66,7 @@ jobs:
           set +e
           timeout 40 ~/godot/godot --headless --path . -- --server --port=7000 > server.log 2>&1 &
           sleep 5
-          timeout 28 ~/godot/godot --headless --path . -- --bot --host=127.0.0.1 --port=7000 > bot1.log 2>&1 &
+          timeout 28 ~/godot/godot --headless --path . -- --bot --host=127.0.0.1 --port=7000 --map=1 > bot1.log 2>&1 &
           sleep 1
           timeout 26 ~/godot/godot --headless --path . -- --bot --host=127.0.0.1 --port=7000 > bot2.log 2>&1 &
           sleep 36
@@ -105,6 +105,7 @@ jobs:
           mkdir -p $D/game
           cp ~/godot/win/*.exe $D/
           cp war-game/*.gd war-game/*.tscn war-game/project.godot $D/game/
+          mkdir -p $D/game/maps && cp war-game/maps/*.bin $D/game/maps/
           CON=$(cd $D && ls *console*.exe | head -1)
           printf '@echo off\r\ncd /d "%%~dp0"\r\necho UA War Front server, UDP port 7000\r\n"%s" --headless --path game -- --server --port=7000\r\npause\r\n' "$CON" > $D/start-war-server.bat
           cd pkg && zip -qr ../UA-WarFront-Server.zip UA-WarFront-Server && cd ..

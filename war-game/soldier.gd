@@ -5,6 +5,7 @@ extends CharacterBody3D
 const Gear = preload("res://gear.gd")
 const Character = preload("res://character.gd")
 const Sfx = preload("res://sfx.gd")
+const World = preload("res://world.gd")
 
 const BASE_SPEED := 5.4
 const GRAV := 20.0
@@ -539,8 +540,10 @@ func _soldier_process(delta: float, mv: Vector2, look: Vector2, firing: bool, ju
 	else:
 		velocity.y -= GRAV * delta
 	move_and_slide()
-	if global_position.y < -12.0:
-		global_position = Vector3(global_position.x, 2.0, global_position.z)
+	if global_position.y < float(World.cur.get("hmin", 0.0)) - 14.0:
+		# впав за край карти — повернення на базу
+		global_position = main.spawn_point(main.my_team)
+		velocity = Vector3.ZERO
 	var hs := Vector2(velocity.x, velocity.z).length()
 	model.look_pitch = head.rotation.x
 	var lv := transform.basis.inverse() * Vector3(velocity.x, 0.0, velocity.z)

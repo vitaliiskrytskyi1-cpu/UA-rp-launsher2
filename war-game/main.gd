@@ -14,7 +14,7 @@ const Inventory = preload("res://inventory.gd")
 const HitHud = preload("res://hithud.gd")
 static var _fpv_scene: PackedScene
 
-const VERSION := 5
+const VERSION := 6
 const DEFAULT_ADDR := "147.185.221.217:11983"
 const DEFAULT_PORT := 7000
 const MAX_PLAYERS := 40
@@ -51,6 +51,9 @@ var capture := 0.0
 var round_over := false
 var cfg_port := DEFAULT_PORT
 var profile := {}
+var map_index := 0
+var map_pref := 0
+var map_btns: Array = []
 
 # сервер
 var snap_t := 0.0
@@ -112,6 +115,8 @@ func _ready() -> void:
 			cfg_port = int(a.substr(7))
 		elif a.begins_with("--host="):
 			host = a.substr(7)
+		elif a.begins_with("--map="):
+			map_pref = int(a.substr(6))
 	if args.has("--server"):
 		start_server()
 	elif args.has("--bot"):
@@ -259,16 +264,35 @@ func _server_spawn(id: int) -> void:
 	p.flags = 0
 	p.armor_dur = 100.0
 	p.helm_dur = 100.0
-	var z := -BASE_Z if p.team == 0 else BASE_Z
-	p.pos = Vector3(randf_range(-25.0, 25.0), 1.2, z + randf_range(-6.0, 6.0))
+	p.pos = spawn_point(p.team)
 	p.yaw = PI if p.team == 0 else 0.0
 	rpc("cl_spawn", id, p.pos, p.yaw)
 	_equip(id)
 
 
 func _in_base(p: Dictionary) -> bool:
-	var bz := -BASE_Z if p.team == 0 else BASE_Z
-	return Vector2(p.pos.x, p.pos.z - bz).length() < BASE_RADIUS
+	var bp := World.base_pos(p.team)
+	return Vector2(p.pos.x - bp.x, p.pos.z - bp.y).length() < float(World.cur.base_r)
+
+
+## Точка відродження на базі команди (висота — по землі карти).
+func spawn_point(team: int) -> Vector3:
+	var bpos := World.base_pos(team)
+	var bz := bpos.y
+	var spread := minf(25.0, float(World.cur.base_r) * 0.8)
+	var x := bpos.x + randf_range(-spread, spread)
+	var z := bz + randf_range(-spread * 0.25, spread * 0.25)
+	if World.cur.has("file"):
+		var bx := bpos.x
+		for attempt in 40:
+			var r := spread * (1.0 + attempt * 0.08)
+			var tx := bx + randf_range(-r, r)
+			var tz := bz + randf_range(-r * 0.4, r * 0.4)
+			var y := World.ground_y(world, tx, tz, -9999.0)
+			if y > -9000.0:
+				return Vector3(tx, y + 0.6, tz)
+		return Vector3(0.0, World.ground_y(world, 0.0, 0.0, 30.0) + 1.0, 0.0)
+	return Vector3(x, 1.2, z)
 
 
 func _spend(prof: Dictionary, amount: int) -> void:
@@ -288,7 +312,7 @@ func _give_money(id: int, amount: int, reason: String) -> void:
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func srv_join(nick: String, ver: int) -> void:
+func srv_join(nick: String, ver: int, pref: int = 0) -> void:
 	if not is_server:
 		return
 	var id := multiplayer.get_remote_sender_id()
@@ -304,12 +328,18 @@ func srv_join(nick: String, ver: int) -> void:
 		if String(players[pid].nick).to_lower() == nick.to_lower():
 			rpc_id(id, "cl_msg", "Позивний «%s» вже в грі. Оберіть інший." % nick)
 			return
+	# якщо на сервері нікого — карта обирається за бажанням гравця
+	pref = clampi(pref, 0, World.map_count() - 1)
+	if players.is_empty() and pref != map_index:
+		_switch_map(pref)
+	rpc_id(id, "cl_map", map_index)
 	var team := 0 if _team_count(0) <= _team_count(1) else 1
 	for pid in players:
 		var e: Dictionary = players[pid]
 		rpc_id(id, "cl_add_player", pid, e.nick, e.team, e.kills, e.deaths)
 		rpc_id(id, "cl_gear", pid, e.prof.eq, int(e.slot))
 	players[id] = _new_pdata(nick, team, _load_profile(nick))
+	players[id].map_pref = pref
 	rpc("cl_add_player", id, nick, team, 0, 0)
 	rpc_id(id, "cl_welcome", id, team, tickets[0], tickets[1], capture)
 	print("[SERVER] %s joined team %d (players: %d)" % [nick, team, players.size()])
@@ -913,7 +943,7 @@ func _capture_tick() -> void:
 	var on_point: Array = []
 	for pid in players:
 		var p: Dictionary = players[pid]
-		if p.alive and p.mode == 0 and Vector2(p.pos.x, p.pos.z).length() < CAPTURE_RADIUS:
+		if p.alive and p.mode == 0 and Vector2(p.pos.x, p.pos.z).length() < float(World.cur.cap):
 			n[p.team] += 1
 			on_point.append(pid)
 	var diff: int = n[1] - n[0]
@@ -953,7 +983,38 @@ func _check_round_end() -> void:
 			return
 
 
+func _switch_map(idx: int) -> void:
+	idx = clampi(idx, 0, World.map_count() - 1)
+	map_index = idx
+	if world:
+		world.free()
+	world = World.build(self, false, idx)
+	print("[SERVER] map: %s" % World.cur.name)
+	rpc("cl_map", idx)
+
+
+## Наступна карта: за голосами гравців (вибір у меню), при нічиїй — випадково серед лідерів.
+func _vote_map() -> int:
+	var votes := {}
+	for pid in players:
+		var v := int(players[pid].get("map_pref", map_index))
+		votes[v] = int(votes.get(v, 0)) + 1
+	if votes.is_empty():
+		return map_index
+	var best := 0
+	for v in votes.values():
+		best = maxi(best, int(v))
+	var top: Array = []
+	for k in votes:
+		if int(votes[k]) == best:
+			top.append(k)
+	return int(top[randi() % top.size()])
+
+
 func _round_restart() -> void:
+	var next := _vote_map()
+	if next != map_index:
+		_switch_map(next)
 	round_over = false
 	tickets = [START_TICKETS, START_TICKETS]
 	capture = 0.0
@@ -993,7 +1054,7 @@ func connect_to(host: String, port: int, nick: String) -> void:
 func _on_connected() -> void:
 	connected = true
 	_set_status("Підключено. Заходимо в бій...")
-	rpc_id(1, "srv_join", str(get_meta("nick", "Боєць")), VERSION)
+	rpc_id(1, "srv_join", str(get_meta("nick", "Боєць")), VERSION, map_pref)
 	if is_bot:
 		print("[BOT] connected as %d" % multiplayer.get_unique_id())
 
@@ -1130,6 +1191,41 @@ func show_hint(t: String) -> void:
 
 
 # ---------------------------------------------------------------- RPC від сервера
+
+@rpc("authority", "call_remote", "reliable")
+func cl_map(idx: int) -> void:
+	if idx == map_index and world != null:
+		return
+	map_index = idx
+	_rebuild_client_world()
+	if is_bot:
+		print("[BOT] map: %s" % World.cur.name)
+	else:
+		_show_center("Карта: %s" % World.cur.name, 3.0)
+
+
+func _rebuild_client_world() -> void:
+	# солдат і аватари переносяться в новий світ, решта (ефекти, дрони) видаляється
+	var keep: Array = []
+	if world:
+		if soldier and soldier.get_parent() == world:
+			world.remove_child(soldier)
+			keep.append(soldier)
+		for id in avatars:
+			var a = avatars[id]
+			if a.get_parent() == world:
+				world.remove_child(a)
+				keep.append(a)
+		for id in remote_drones:
+			remote_drones[id].queue_free()
+		remote_drones.clear()
+		projectiles.clear()
+		world.free()
+	world = null
+	_build_client_world()
+	for n in keep:
+		world.add_child(n)
+
 
 @rpc("authority", "call_remote", "reliable")
 func cl_welcome(id: int, team: int, t0: int, t1: int, cap: float) -> void:
@@ -1456,7 +1552,8 @@ func _remove_remote_drone(id: int) -> void:
 # =====================================================================
 
 func _build_client_world() -> void:
-	world = World.build(self, true)
+	world = World.build(self, true, map_index)
+	World.decorate_scan(world, World.cur.has("file"))
 	tracer_mat = StandardMaterial3D.new()
 	tracer_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	tracer_mat.albedo_color = Color(1.0, 0.85, 0.45)
@@ -1771,7 +1868,7 @@ func _build_ui() -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 12)
 	menu.add_child(box)
-	_place(box, Vector4(0.5, 0.5, 0.5, 0.5), Vector4(-300, -280, 300, 280))
+	_place(box, Vector4(0.5, 0.5, 0.5, 0.5), Vector4(-470, -345, 470, 345))
 
 	var title := Label.new()
 	title.text = "UA WAR FRONT"
@@ -1807,6 +1904,36 @@ func _build_ui() -> void:
 	addr_edit.custom_minimum_size = Vector2(0, 56)
 	box.add_child(addr_edit)
 
+	# вибір карти
+	var ml := Label.new()
+	ml.text = "Карта (якщо на сервері вже йде бій — голос за наступну карту)"
+	ml.add_theme_font_size_override("font_size", 18)
+	ml.add_theme_color_override("font_color", Color(0.8, 0.82, 0.86))
+	box.add_child(ml)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_child(row)
+	map_pref = clampi(int(cfg.get_value("main", "map", 0)), 0, World.map_count() - 1)
+	map_btns.clear()
+	for mi in World.map_count():
+		var md: Dictionary = World.MAPS[mi]
+		var b := Button.new()
+		b.toggle_mode = true
+		b.text = String(md.name)
+		b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+		b.expand_icon = true
+		b.custom_minimum_size = Vector2(176, 170)
+		b.add_theme_font_size_override("font_size", 17)
+		var ip := "res://maps/%s_top.png" % String(md.get("file", "field"))
+		if ResourceLoader.exists(ip):
+			b.icon = load(ip)
+		b.button_pressed = mi == map_pref
+		b.pressed.connect(_select_map.bind(mi))
+		row.add_child(b)
+		map_btns.append(b)
+
 	var play := Button.new()
 	play.text = "В БІЙ"
 	play.add_theme_font_size_override("font_size", 36)
@@ -1822,11 +1949,17 @@ func _build_ui() -> void:
 
 	var help := Label.new()
 	help.text = "Ліва частина екрана — рух, права — огляд. ЗБРОЯ — автомат / РПГ або міномет / сховати.\nГроші — за ліквідації, збиті дрони, утримання точки і перемогу. Витрачайте їх у МАГАЗИНІ.\nВсе, що береш у бій, важить: що важче спорядження, то повільніше рухаєшся."
-	help.add_theme_font_size_override("font_size", 16)
+	help.add_theme_font_size_override("font_size", 14)
 	help.add_theme_color_override("font_color", Color(0.7, 0.72, 0.76))
 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD
 	box.add_child(help)
+
+
+func _select_map(idx: int) -> void:
+	map_pref = idx
+	for i in map_btns.size():
+		map_btns[i].button_pressed = i == idx
 
 
 func _on_play_pressed() -> void:
@@ -1847,6 +1980,7 @@ func _on_play_pressed() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("main", "nick", nick)
 	cfg.set_value("main", "addr", addr)
+	cfg.set_value("main", "map", map_pref)
 	cfg.save("user://settings.cfg")
 	connect_to(host, port, nick)
 

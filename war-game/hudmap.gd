@@ -7,6 +7,12 @@ const World = preload("res://world.gd")
 
 var main
 var full := false
+var _tex: Texture2D
+var _tex_id := ""
+
+
+static func span() -> float:
+	return maxf(float(World.cur.half), float(World.cur.get("hz", World.cur.half)))
 
 
 func _ready() -> void:
@@ -45,7 +51,7 @@ func _map_rect() -> Rect2:
 
 func _to_screen(r: Rect2, p: Vector3) -> Vector2:
 	var flip := 1.0 if main.my_team == 1 else -1.0
-	var k := r.size.x / (World.HALF * 2.0)
+	var k := r.size.x / (span() * 2.0)
 	return r.position + r.size * 0.5 + Vector2(p.x * flip, p.z * flip) * k
 
 
@@ -58,31 +64,42 @@ func _draw() -> void:
 	draw_rect(r, Color(0.22, 0.27, 0.16, 0.88))
 	draw_rect(r, Color(1, 1, 1, 0.5), false, 2.0)
 	var lw := 3.0 if full else 1.6
-
-	# лісосмуги
+	var scan: bool = World.cur.has("file")
+	if scan:
+		# вид згори на скан місцевості
+		if _tex_id != String(World.cur.id):
+			_tex_id = String(World.cur.id)
+			_tex = load("res://maps/%s_top.png" % World.cur.file)
+		if _tex:
+			var flip := 1.0 if main.my_team == 1 else -1.0
+			var c := r.position + r.size * 0.5
+			draw_set_transform(c, 0.0 if flip > 0.0 else PI, Vector2.ONE)
+			draw_texture_rect(_tex, Rect2(-r.size * 0.5, r.size), false, Color(1, 1, 1, 0.9))
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var rows := []
 	for s in [-1.0, 1.0]:
 		rows.append([Vector3(-140, 0, s * 20), Vector3(140, 0, s * 20)])
 		rows.append([Vector3(-140, 0, s * 66), Vector3(140, 0, s * 66)])
 		rows.append([Vector3(s * 62, 0, -38), Vector3(s * 62, 0, 38)])
 		rows.append([Vector3(s * 100, 0, s * 92), Vector3(s * 100, 0, s * 140)])
-	for row in rows:
+	for row in ([] if scan else rows):
 		draw_line(_to_screen(r, row[0]), _to_screen(r, row[1]), Color(0.12, 0.3, 0.1), lw * 2.2)
 	# окопи
-	for tz in World.TRENCH_Z:
+	for tz in ([] if scan else World.TRENCH_Z):
 		draw_line(_to_screen(r, Vector3(-World.TRENCH_X, 0, tz)), _to_screen(r, Vector3(World.TRENCH_X, 0, tz)), Color(0.45, 0.33, 0.2), lw * 1.6)
 	# бази
 	for t in 2:
-		var bz := -World.BASE_Z if t == 0 else World.BASE_Z
-		var a := _to_screen(r, Vector3(-34, 0, bz - 14))
-		var b := _to_screen(r, Vector3(34, 0, bz + 14))
+		var bp := World.base_pos(t)
+		var br: float = World.cur.base_r
+		var a := _to_screen(r, Vector3(bp.x - br, 0, bp.y - br * 0.45))
+		var b := _to_screen(r, Vector3(bp.x + br, 0, bp.y + br * 0.45))
 		var rect := Rect2(Vector2(minf(a.x, b.x), minf(a.y, b.y)), (b - a).abs())
 		var col: Color = main.TEAM_COLORS[t]
 		draw_rect(rect, Color(col.r, col.g, col.b, 0.25))
 		draw_rect(rect, col, false, lw)
 	# точка захоплення
 	var cc := _to_screen(r, Vector3.ZERO)
-	var cr := 14.0 * r.size.x / (World.HALF * 2.0)
+	var cr := float(World.cur.cap) * r.size.x / (span() * 2.0)
 	var capcol := Color(1, 1, 1, 0.8)
 	if main.capture <= -100.0:
 		capcol = main.TEAM_COLORS[0]
