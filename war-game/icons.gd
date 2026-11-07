@@ -109,6 +109,42 @@ static func draw(ci: CanvasItem, name: String, c: Vector2, s: float, col: Color)
 			ci.draw_colored_polygon(PackedVector2Array([c + Vector2(0, -s * 0.45), c + Vector2(s * 0.14, -s * 0.2), c + Vector2(s * 0.14, s * 0.22), c + Vector2(-s * 0.14, s * 0.22), c + Vector2(-s * 0.14, -s * 0.2)]), col)
 			ci.draw_line(c + Vector2(-s * 0.2, s * 0.42), c + Vector2(s * 0.2, s * 0.42), col, w)
 			ci.draw_line(c + Vector2(0, s * 0.22), c + Vector2(0, s * 0.42), col, w)
+		"grenade":
+			# осколкова граната з чекою
+			ci.draw_circle(c + Vector2(0, s * 0.08), s * 0.3, col)
+			for i in 3:
+				ci.draw_line(c + Vector2(-s * 0.28, s * (-0.06 + i * 0.13)), c + Vector2(s * 0.28, s * (-0.06 + i * 0.13)), Color(0, 0, 0, 0.45), w * 0.6)
+			ci.draw_rect(Rect2(c + Vector2(-s * 0.1, -s * 0.34), Vector2(s * 0.2, s * 0.14)), col)
+			ci.draw_line(c + Vector2(s * 0.1, -s * 0.3), c + Vector2(s * 0.34, -s * 0.12), col, w)
+			ci.draw_arc(c + Vector2(-s * 0.2, -s * 0.36), s * 0.1, 0.0, TAU, 14, col, w * 0.8)
+		"prone":
+			# людина лежить
+			ci.draw_circle(c + Vector2(-s * 0.36, s * 0.08), s * 0.1, col)
+			ci.draw_line(c + Vector2(-s * 0.24, s * 0.14), c + Vector2(s * 0.42, s * 0.2), col, w * 1.4)
+			ci.draw_line(c + Vector2(-s * 0.3, s * 0.0), c + Vector2(-s * 0.02, -s * 0.08), col, w)
+			ci.draw_line(c + Vector2(-s * 0.48, s * 0.3), c + Vector2(s * 0.48, s * 0.3), Color(col.r, col.g, col.b, 0.5), w * 0.7)
+		"lean_l", "lean_r":
+			var sg := -1.0 if name == "lean_l" else 1.0
+			ci.draw_circle(c + Vector2(sg * s * 0.24, -s * 0.3), s * 0.1, col)
+			ci.draw_line(c + Vector2(sg * s * 0.18, -s * 0.18), c + Vector2(0, s * 0.12), col, w * 1.3)
+			ci.draw_line(c + Vector2(0, s * 0.12), c + Vector2(-s * 0.12, s * 0.45), col, w * 1.2)
+			ci.draw_line(c + Vector2(0, s * 0.12), c + Vector2(s * 0.12, s * 0.45), col, w * 1.2)
+			ci.draw_arc(c + Vector2(0, s * 0.1), s * 0.42, -PI * 0.5 - 0.6 if sg < 0.0 else -PI * 0.5 + 0.1, -PI * 0.5 - 0.1 if sg < 0.0 else -PI * 0.5 + 0.6, 10, col, w * 0.7)
+		"sprint":
+			ci.draw_circle(c + Vector2(s * 0.12, -s * 0.36), s * 0.1, col)
+			ci.draw_line(c + Vector2(s * 0.06, -s * 0.24), c + Vector2(-s * 0.08, s * 0.06), col, w * 1.3)
+			ci.draw_line(c + Vector2(-s * 0.08, s * 0.06), c + Vector2(s * 0.18, s * 0.2), col, w * 1.2)
+			ci.draw_line(c + Vector2(s * 0.18, s * 0.2), c + Vector2(s * 0.12, s * 0.44), col, w * 1.2)
+			ci.draw_line(c + Vector2(-s * 0.08, s * 0.06), c + Vector2(-s * 0.32, s * 0.36), col, w * 1.2)
+			ci.draw_line(c + Vector2(s * 0.02, -s * 0.16), c + Vector2(s * 0.3, -s * 0.02), col, w)
+			ci.draw_line(c + Vector2(s * 0.02, -s * 0.16), c + Vector2(-s * 0.26, -s * 0.1), col, w)
+			for i in 3:
+				ci.draw_line(c + Vector2(-s * 0.48, -s * 0.2 + i * s * 0.14), c + Vector2(-s * 0.36, -s * 0.2 + i * s * 0.14), col, w * 0.6)
+		"shoulder":
+			ci.draw_circle(c + Vector2(0, -s * 0.12), s * 0.14, col)
+			ci.draw_arc(c + Vector2(0, s * 0.3), s * 0.3, PI, TAU, 16, col, w * 1.2)
+			_arrow2(ci, c + Vector2(-s * 0.42, -s * 0.12), s * 0.2, col, w, -1.0)
+			_arrow2(ci, c + Vector2(s * 0.42, -s * 0.12), s * 0.2, col, w, 1.0)
 		"close":
 			ci.draw_line(c + Vector2(-s * 0.3, -s * 0.3), c + Vector2(s * 0.3, s * 0.3), col, w * 1.3)
 			ci.draw_line(c + Vector2(s * 0.3, -s * 0.3), c + Vector2(-s * 0.3, s * 0.3), col, w * 1.3)
@@ -119,3 +155,7 @@ static func draw(ci: CanvasItem, name: String, c: Vector2, s: float, col: Color)
 static func _arrow(ci: CanvasItem, c: Vector2, s: float, col: Color, w: float, dir: float) -> void:
 	ci.draw_line(c + Vector2(0, -dir * s * 0.4), c + Vector2(0, dir * s * 0.4), col, w * 1.4)
 	ci.draw_colored_polygon(PackedVector2Array([c + Vector2(0, dir * s * 0.45), c + Vector2(-s * 0.28, dir * s * 0.1), c + Vector2(s * 0.28, dir * s * 0.1)]), col)
+
+
+static func _arrow2(ci: CanvasItem, c: Vector2, s: float, col: Color, w: float, dir: float) -> void:
+	ci.draw_colored_polygon(PackedVector2Array([c + Vector2(dir * s * 0.5, 0), c + Vector2(-dir * s * 0.3, -s * 0.4), c + Vector2(-dir * s * 0.3, s * 0.4)]), col)

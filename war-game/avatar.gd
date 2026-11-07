@@ -42,8 +42,12 @@ func _process(delta: float) -> void:
 	position = position.lerp(target_pos, k)
 	rotation.y = lerp_angle(rotation.y, target_yaw, k)
 	if delta > 0.0:
-		var v := Vector2(position.x - _last_pos.x, position.z - _last_pos.z).length() / delta
+		var wv := Vector3(position.x - _last_pos.x, 0.0, position.z - _last_pos.z) / delta
+		var v := Vector2(wv.x, wv.z).length()
 		_speed = lerpf(_speed, v, clampf(delta * 8.0, 0.0, 1.0))
+		if model and v > 0.2:
+			var lv := Basis(Vector3.UP, rotation.y).inverse() * wv
+			model.move_local = Vector2(lv.x, -lv.z)
 	_last_pos = position
 	if model:
 		model.animate(_speed, delta)

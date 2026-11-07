@@ -11,9 +11,10 @@ const Gear = preload("res://gear.gd")
 const Sfx = preload("res://sfx.gd")
 const HudMap = preload("res://hudmap.gd")
 const Inventory = preload("res://inventory.gd")
+const HitHud = preload("res://hithud.gd")
 static var _fpv_scene: PackedScene
 
-const VERSION := 4
+const VERSION := 5
 const DEFAULT_ADDR := "147.185.221.217:11983"
 const DEFAULT_PORT := 7000
 const MAX_PLAYERS := 40
@@ -88,6 +89,14 @@ var shop_cat := "w"
 var minimap: Control
 var bigmap: Control
 var bag: Control
+var hithud: Control
+## Пошкодження по зонах тіла (для рюкзака і HUD): 0 голова … 6 права нога, 7 вибух.
+var zone_dmg := [0, 0, 0, 0, 0, 0, 0, 0]
+var zone_flash := [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+var armor_dur := 100
+var helm_dur := 100
+const ZONE_NAMES := ["голова", "груди", "живіт", "ліва рука", "права рука", "ліва нога", "права нога", "вибух"]
+static var _gren_scene: PackedScene
 var tracer_mat: StandardMaterial3D
 var boom_mat: StandardMaterial3D
 var smoke_mat: StandardMaterial3D
@@ -181,6 +190,7 @@ func _new_pdata(nick: String, team: int, prof: Dictionary) -> Dictionary:
 		"dpos": Vector3.ZERO, "dyaw": 0.0, "kills": 0, "deaths": 0,
 		"respawn": 0.0, "drone_t": 0.0, "last_fire": 0, "last_heavy": 0,
 		"in_mag": 0, "mags": 0, "drones": 0, "heavy": 0, "crouch": false,
+		"flags": 0, "aim": false, "gren": 0, "armor_dur": 100.0, "helm_dur": 100.0, "last_gren": 0,
 	}
 
 
@@ -207,6 +217,9 @@ func _equip(id: int) -> void:
 		var ht := mini(hs, Gear.heavy_slots(eq))
 		prof.heavy_ammo[eq.x] = hs - ht
 		p.heavy = ht
+	var gt := mini(int(prof.get("gren", 0)), Gear.grenade_slots(eq))
+	prof.gren = int(prof.get("gren", 0)) - gt
+	p.gren = gt
 	p.slot = 0
 	_save_profile(id)
 	_send_loadout(id)
@@ -225,15 +238,17 @@ func _return_carried(id: int) -> void:
 	prof.fpv = int(prof.fpv) + int(p.drones)
 	if eq.x != "none":
 		prof.heavy_ammo[eq.x] = int(prof.heavy_ammo.get(eq.x, 0)) + int(p.heavy)
+	prof.gren = int(prof.get("gren", 0)) + int(p.gren)
 	p.mags = 0
 	p.in_mag = 0
 	p.drones = 0
 	p.heavy = 0
+	p.gren = 0
 
 
 func _send_loadout(id: int) -> void:
 	var p: Dictionary = players[id]
-	rpc_id(id, "cl_loadout", p.prof, p.in_mag, p.mags, p.drones, p.heavy)
+	rpc_id(id, "cl_loadout", p.prof, p.in_mag, p.mags, p.drones, p.heavy, p.gren, int(p.armor_dur), int(p.helm_dur))
 
 
 func _server_spawn(id: int) -> void:
@@ -241,6 +256,9 @@ func _server_spawn(id: int) -> void:
 	p.hp = 100
 	p.alive = true
 	p.mode = 0
+	p.flags = 0
+	p.armor_dur = 100.0
+	p.helm_dur = 100.0
 	var z := -BASE_Z if p.team == 0 else BASE_Z
 	p.pos = Vector3(randf_range(-25.0, 25.0), 1.2, z + randf_range(-6.0, 6.0))
 	p.yaw = PI if p.team == 0 else 0.0
@@ -314,6 +332,7 @@ func srv_state(pos: Vector3, yaw: float, pitch: float, mode: int, dpos: Vector3,
 	p.pitch = pitch
 	p.crouch = (mode & 2) != 0
 	p.aim = (mode & 4) != 0
+	p.flags = mode & ~1
 	if p.mode == 1 and (mode & 1) == 1:
 		if p.dpos.distance_to(dpos) < 40.0:
 			p.dpos = dpos
@@ -419,6 +438,32 @@ func srv_mortar(target: Vector3) -> void:
 
 
 @rpc("any_peer", "call_remote", "reliable")
+func srv_grenade(target: Vector3) -> void:
+	if not is_server:
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if not players.has(id):
+		return
+	var p: Dictionary = players[id]
+	if not p.alive or p.mode != 0 or int(p.gren) <= 0:
+		return
+	var now := Time.get_ticks_msec()
+	if now - int(p.last_gren) < 1200:
+		return
+	p.last_gren = now
+	p.gren = int(p.gren) - 1
+	var flat := Vector2(target.x - p.pos.x, target.z - p.pos.z)
+	if flat.length() > Gear.GRENADE_RANGE:
+		flat = flat.normalized() * Gear.GRENADE_RANGE
+		target = Vector3(p.pos.x + flat.x, target.y, p.pos.z + flat.y)
+	var flight := 0.5 + flat.length() / 20.0
+	var fuse := maxf(Gear.GRENADE_FUSE, flight + 0.6)
+	var from: Vector3 = p.pos + Vector3(0.0, 1.6, 0.0)
+	mortar_impacts.append({"owner": id, "team": p.team, "pos": target, "t": fuse, "kind": "gren"})
+	rpc("cl_grenade", id, from, target, flight, fuse)
+
+
+@rpc("any_peer", "call_remote", "reliable")
 func srv_drone_start() -> void:
 	if not is_server:
 		return
@@ -502,6 +547,14 @@ func srv_buy(cat: String, key: String, qty: int) -> void:
 			_spend(prof, cost)
 			prof.mags[key] = int(prof.mags.get(key, 0)) + qty
 			msg = "Куплено магазинів: %d" % qty
+		"gren":
+			var cost := Gear.GRENADE_PRICE * qty
+			if int(prof.money) < cost:
+				rpc_id(id, "cl_msg", "Недостатньо грошей.")
+				return
+			_spend(prof, cost)
+			prof.gren = int(prof.get("gren", 0)) + qty
+			msg = "Куплено гранат: %d" % qty
 		"hammo":
 			if not Gear.HEAVY.has(key) or key == "none":
 				return
@@ -515,7 +568,7 @@ func srv_buy(cat: String, key: String, qty: int) -> void:
 		_:
 			return
 	# поповнення на базі
-	if p.alive and _in_base(p) and cat in ["fpv", "mag", "hammo"]:
+	if p.alive and _in_base(p) and cat in ["fpv", "mag", "hammo", "gren"]:
 		_return_carried(id)
 		_equip(id)
 	_save_profile(id)
@@ -612,10 +665,8 @@ func _process_shot(id: int, origin: Vector3, dir: Vector3) -> void:
 		var e: Dictionary = players[pid]
 		if not e.alive or e.team == p.team:
 			continue
-		var parts := [[Vector3(0.0, 1.7, 0.0), 0.2, 0], [Vector3(0.0, 1.3, 0.0), 0.32, 1], [Vector3(0.0, 0.95, 0.0), 0.3, 1], [Vector3(0.0, 0.45, 0.0), 0.3, 2]]
-		var hk := 0.66 if e.crouch else 1.0
-		for part in parts:
-			var d := _ray_sphere(origin, dir, e.pos + part[0] * hk, part[1])
+		for part in hit_parts(e):
+			var d := _ray_sphere(origin, dir, part[0], part[1])
 			if d >= 0.0 and d < best_d:
 				best_d = d
 				target = pid
@@ -636,18 +687,60 @@ func _process_shot(id: int, origin: Vector3, dir: Vector3) -> void:
 		_give_money(id, Gear.REWARD_DRONE_SHOTDOWN, "дрон збито")
 		return
 	var e: Dictionary = players[target]
-	var dmg := float(w.dmg)
+	var raw := float(w.dmg)
+	var dmg := raw
 	var head := part_hit == 0
-	if head:
-		dmg *= 2.2 * (1.0 - float(Gear.HELMET[e.prof.eq.h].reduce))
-	elif part_hit == 1:
-		dmg *= 1.0 - float(Gear.ARMOR[e.prof.eq.a].reduce)
-	else:
-		dmg *= 0.8
-	_damage(target, id, int(round(dmg)), head)
+	var a_eff := 0.35 + 0.65 * float(e.armor_dur) / 100.0
+	var h_eff := 0.35 + 0.65 * float(e.helm_dur) / 100.0
+	match part_hit:
+		0:
+			dmg *= 2.2 * (1.0 - float(Gear.HELMET[e.prof.eq.h].reduce) * h_eff)
+			if e.prof.eq.h != "none":
+				e.helm_dur = maxf(0.0, float(e.helm_dur) - raw * 0.8)
+		1, 2:
+			var k := 1.0 if part_hit == 1 else 0.7
+			dmg *= 1.0 - float(Gear.ARMOR[e.prof.eq.a].reduce) * a_eff * k
+			if e.prof.eq.a != "none":
+				e.armor_dur = maxf(0.0, float(e.armor_dur) - raw * 0.6 * k)
+		3, 4:
+			dmg *= 0.7
+		_:
+			dmg *= 0.75
+	_damage(target, id, int(round(dmg)), head, part_hit, origin)
 
 
-func _damage(vid: int, kid: int, dmg: int, head: bool = false) -> void:
+## Сфери влучання з урахуванням розвороту, присіду, лежання і нахилу.
+## Зони: 0 голова, 1 груди, 2 живіт, 3 ліва рука, 4 права рука, 5 ліва нога, 6 права нога.
+const HIT_PARTS := [
+	[Vector3(0.0, 1.66, 0.0), 0.14, 0], [Vector3(0.0, 1.38, 0.0), 0.21, 1], [Vector3(0.0, 1.08, 0.0), 0.19, 2],
+	[Vector3(-0.27, 1.28, -0.08), 0.09, 3], [Vector3(0.27, 1.28, -0.08), 0.09, 4],
+	[Vector3(-0.11, 0.75, 0.0), 0.13, 5], [Vector3(0.11, 0.75, 0.0), 0.13, 6],
+	[Vector3(-0.11, 0.35, 0.0), 0.11, 5], [Vector3(0.11, 0.35, 0.0), 0.11, 6],
+]
+
+
+func hit_parts(e: Dictionary) -> Array:
+	var out: Array = []
+	var f := int(e.get("flags", 0))
+	var prone := (f & 8) != 0
+	var crouch := (f & 2) != 0
+	var lean := (-1.0 if (f & 16) != 0 else 0.0) + (1.0 if (f & 32) != 0 else 0.0)
+	var b := Basis(Vector3.UP, float(e.yaw))
+	for part in HIT_PARTS:
+		var lp: Vector3 = part[0]
+		if prone:
+			lp = Vector3(lp.x, 0.22, -(lp.y - 0.9))
+		else:
+			if lean != 0.0 and lp.y > 0.95:
+				lp.x += lean * 0.38 * (lp.y - 0.95) / 0.7
+				lp.y -= absf(lean) * 0.06
+			if crouch:
+				lp.y *= 0.66
+		out.append([e.pos + b * lp, part[1], part[2]])
+	return out
+
+
+func _damage(vid: int, kid: int, dmg: int, head: bool = false, zone: int = 7, from: Vector3 = Vector3.ZERO) -> void:
 	if not players.has(vid):
 		return
 	var v: Dictionary = players[vid]
@@ -657,9 +750,9 @@ func _damage(vid: int, kid: int, dmg: int, head: bool = false) -> void:
 	if v.hp <= 0:
 		_kill(vid, kid, head)
 	else:
-		rpc_id(vid, "cl_hp", v.hp)
+		rpc_id(vid, "cl_hp", v.hp, zone, maxi(1, dmg), from, int(v.armor_dur), int(v.helm_dur))
 		if players.has(kid) and kid != vid:
-			rpc_id(kid, "cl_hitmark")
+			rpc_id(kid, "cl_hitmark", zone)
 
 
 func _kill(vid: int, kid: int, head: bool = false) -> void:
@@ -675,6 +768,7 @@ func _kill(vid: int, kid: int, head: bool = false) -> void:
 	v.in_mag = 0
 	v.drones = 0
 	v.heavy = 0
+	v.gren = 0
 	_save_profile(vid)
 	var kname := ""
 	if players.has(kid) and kid != vid:
@@ -717,10 +811,12 @@ func _explode(pos: Vector3, kid: int, team: int, radius: float, maxdmg: float, r
 			q.collision_mask = 1
 			if not world.get_world_3d().direct_space_state.intersect_ray(q).is_empty():
 				cover = 0.3
-			var armor := 1.0 - float(Gear.ARMOR[e.prof.eq.a].reduce) * 0.5
+			var armor := 1.0 - float(Gear.ARMOR[e.prof.eq.a].reduce) * 0.5 * (0.35 + 0.65 * float(e.armor_dur) / 100.0)
 			var dmg := int(maxdmg * (1.0 - d / radius) * cover * armor) + 5
+			if e.prof.eq.a != "none":
+				e.armor_dur = maxf(0.0, float(e.armor_dur) - dmg * 0.4)
 			var was_alive: bool = e.alive
-			_damage(pid, kid, dmg)
+			_damage(pid, kid, dmg, false, 7, pos)
 			if was_alive and not e.alive and reward > 0 and players.has(kid):
 				_give_money(kid, reward - Gear.REWARD_KILL, "бонус за вибух")
 
@@ -776,8 +872,11 @@ func _update_mortars(delta: float) -> void:
 	for m in mortar_impacts:
 		m.t -= delta
 		if m.t <= 0.0:
-			var h: Dictionary = Gear.HEAVY["mortar"]
-			_explode(m.pos + Vector3(0.0, 0.3, 0.0), m.owner, m.team, float(h.radius), float(h.dmg))
+			if m.get("kind", "") == "gren":
+				_explode(m.pos + Vector3(0.0, 0.3, 0.0), m.owner, m.team, Gear.GRENADE_RADIUS, Gear.GRENADE_DMG)
+			else:
+				var h: Dictionary = Gear.HEAVY["mortar"]
+				_explode(m.pos + Vector3(0.0, 0.3, 0.0), m.owner, m.team, float(h.radius), float(h.dmg))
 		else:
 			keep.append(m)
 	mortar_impacts = keep
@@ -801,7 +900,7 @@ func _send_snapshot() -> void:
 		if not p.alive:
 			continue
 		ids.append(pid)
-		var m := int(p.mode) | (2 if p.crouch else 0) | (4 if p.get("aim", false) else 0)
+		var m := int(p.mode) | (int(p.flags) & ~1)
 		var vals := [p.pos.x, p.pos.y, p.pos.z, p.yaw, p.pitch, float(m), p.dpos.x, p.dpos.y, p.dpos.z, p.dyaw, float(p.slot)]
 		for v in vals:
 			data.append(v)
@@ -1020,6 +1119,7 @@ func bot_shop_test() -> void:
 	buy("fpv", "", 1)
 	buy("mag", "aks74u", 2)
 	buy("h", "h1")
+	buy("gren", "", 2)
 	print("[BOT] shop test sent")
 
 
@@ -1075,10 +1175,12 @@ func cl_gear(id: int, eq: Dictionary, slot: int) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
-func cl_loadout(prof: Dictionary, in_mag: int, mags: int, drones: int, heavy: int) -> void:
+func cl_loadout(prof: Dictionary, in_mag: int, mags: int, drones: int, heavy: int, gren: int, adur: int, hdur: int) -> void:
 	profile = prof
+	armor_dur = adur
+	helm_dur = hdur
 	if soldier:
-		soldier.apply_loadout(prof.eq, in_mag, mags, drones, heavy)
+		soldier.apply_loadout(prof.eq, in_mag, mags, drones, heavy, gren)
 	if shop and shop.visible:
 		_refresh_shop()
 	if is_bot:
@@ -1105,6 +1207,10 @@ func cl_spawn(id: int, pos: Vector3, yaw: float) -> void:
 		soldier.respawn(pos, yaw)
 		alive_local = true
 		my_hp = 100
+		zone_dmg = [0, 0, 0, 0, 0, 0, 0, 0]
+		zone_flash = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+		armor_dur = 100
+		helm_dur = 100
 		if is_bot:
 			print("[BOT] spawned at %s" % str(pos))
 	elif avatars.has(id):
@@ -1128,8 +1234,11 @@ func cl_snapshot(ids: PackedInt32Array, data: PackedFloat32Array) -> void:
 			a.visible = true
 		var mode := int(data[b + 5])
 		if avatars.has(id):
-			avatars[id].model.set_pose((mode & 2) != 0, (mode & 4) != 0)
-			avatars[id].model.look_pitch = data[b + 4]
+			var am = avatars[id].model
+			am.set_pose((mode & 2) != 0, (mode & 4) != 0)
+			am.look_pitch = data[b + 4]
+			var lv := -1.0 if (mode & 16) != 0 else (1.0 if (mode & 32) != 0 else 0.0)
+			am.set_move_state((mode & 8) != 0, lv, (mode & 64) != 0, (mode & 128) != 0)
 		if (mode & 1) == 1:
 			var dpos := Vector3(data[b + 6], data[b + 7], data[b + 8])
 			if not remote_drones.has(id) and players.has(id):
@@ -1185,14 +1294,62 @@ func cl_mortar_fire(id: int, from: Vector3, impact: Vector3, flight: float) -> v
 
 
 @rpc("authority", "call_remote", "reliable")
-func cl_hp(hp: int) -> void:
+func cl_hp(hp: int, zone: int, dmg: int, from: Vector3, adur: int, hdur: int) -> void:
 	my_hp = hp
-	_show_center("Вас поранено!", 0.6)
+	armor_dur = adur
+	helm_dur = hdur
+	zone = clampi(zone, 0, 7)
+	zone_dmg[zone] = int(zone_dmg[zone]) + dmg
+	zone_flash[zone] = 1.0
+	if zone == 7:
+		for z in [1, 2, 5, 6]:
+			zone_flash[z] = maxf(float(zone_flash[z]), 0.7)
+	if hithud and soldier:
+		hithud.add_hit(from, zone, dmg)
+	_add_feed("Поранено: %s  −%d" % [ZONE_NAMES[zone], dmg])
+	Sfx.play(self, "hit", null, -4.0, 0.7)
 
 
 @rpc("authority", "call_remote", "reliable")
-func cl_hitmark() -> void:
-	_show_center("✕ влучання", 0.4)
+func cl_grenade(id: int, from: Vector3, target: Vector3, flight: float, fuse: float) -> void:
+	if world == null:
+		return
+	if _gren_scene == null:
+		_gren_scene = load("res://models/grenade.glb")
+	var g: Node3D = _gren_scene.instantiate()
+	g.scale = Vector3.ONE * 1.4
+	world.add_child(g)
+	g.global_position = from
+	Sfx.play(world, "reload", from, -4.0, 1.6)
+	var tw := g.create_tween()
+	var peak := maxf(from.y, target.y) + 1.5 + from.distance_to(target) * 0.12
+	tw.tween_method(_gren_fly.bind(g, from, target, peak), 0.0, 1.0, flight)
+	tw.tween_interval(maxf(0.05, fuse - flight))
+	tw.tween_callback(g.queue_free)
+	if id == my_id:
+		_show_center("Граната!", 0.8)
+
+
+func _gren_fly(t: float, g: Node3D, from: Vector3, target: Vector3, peak: float) -> void:
+	if not is_instance_valid(g):
+		return
+	var p := from.lerp(target + Vector3(0.0, 0.06, 0.0), t)
+	p.y += sin(t * PI) * (peak - lerpf(from.y, target.y, t))
+	g.global_position = p
+	g.rotation = Vector3(t * 14.0, t * 5.0, 0.0)
+
+
+func local_grenade(target: Vector3) -> void:
+	if is_server:
+		return
+	rpc_id(1, "srv_grenade", target)
+
+
+@rpc("authority", "call_remote", "reliable")
+func cl_hitmark(zone: int) -> void:
+	_show_center("✕ влучання: %s" % ZONE_NAMES[clampi(zone, 0, 7)], 0.5)
+	if hithud:
+		hithud.hitmark(zone)
 	Sfx.play(self, "hit", null, -6.0)
 
 
@@ -1404,6 +1561,8 @@ func _boom_fx(pos: Vector3, radius: float) -> void:
 
 
 func _process(delta: float) -> void:
+	for zi in 8:
+		zone_flash[zi] = maxf(0.0, float(zone_flash[zi]) - delta * 0.45)
 	if is_server:
 		return
 	if drone_time > 0.0:
@@ -1445,7 +1604,7 @@ func _process(delta: float) -> void:
 	if touch and touch.bag_pressed:
 		touch.bag_pressed = false
 		if bag:
-			bag.show()
+			bag.open()
 			touch.hide()
 			touch.reset_input()
 	if touch and touch.map_pressed:
@@ -1506,7 +1665,7 @@ func _update_hud(delta: float) -> void:
 		else:
 			ammo_lbl.text = "Зброю сховано"
 		if touch:
-			var bd := {"drone": soldier.drones, "reload": soldier.mags}
+			var bd := {"drone": soldier.drones, "reload": soldier.mags, "grenade": soldier.grenades}
 			if soldier.slot == 1:
 				bd["slot"] = soldier.heavy_ammo
 			touch.badges = bd
@@ -1593,6 +1752,9 @@ func _build_ui() -> void:
 	ui.add_child(bigmap)
 	bigmap.setup(self, true)
 	bigmap.hide()
+	hithud = HitHud.new()
+	hud.add_child(hithud)
+	hithud.setup(self)
 	bag = Inventory.new()
 	ui.add_child(bag)
 	bag.setup(self)
@@ -1821,6 +1983,8 @@ func _refresh_shop() -> void:
 	var w := Gear.weight(eq, Gear.mag_capacity(eq), Gear.drone_slots(eq), Gear.heavy_slots(eq) if eq.x != "none" else 0)
 	shop_info.text = "Вага повного спорядження: %.1f кг • швидкість %d%% • з собою: магазинів %d, дронів %d, важких боєприпасів %d.\nКупівлі зберігаються. На базі зміни діють одразу, в бою — після відродження." % [w, int(Gear.speed_mult(w) * 100.0), Gear.mag_capacity(eq), Gear.drone_slots(eq), Gear.heavy_slots(eq) if eq.x != "none" else 0]
 	if shop_cat == "c":
+		_shop_row("Ручна граната. На складі: %d. Береш з собою до %d (розгрузка і рюкзак). Вага 0,6 кг, радіус 7 м." % [int(profile.get("gren", 0)), Gear.grenade_slots(eq)],
+			[["+1  $%d" % Gear.GRENADE_PRICE, func(): buy("gren", "", 1)], ["+5  $%d" % (Gear.GRENADE_PRICE * 5), func(): buy("gren", "", 5)]])
 		_shop_row("FPV-дрон-камікадзе. На складі: %d. Береш з собою до %d (залежить від рюкзака). Вага 1,5 кг." % [int(profile.fpv), Gear.drone_slots(eq)],
 			[["+1  $%d" % Gear.FPV_PRICE, func(): buy("fpv", "", 1)], ["+5  $%d" % (Gear.FPV_PRICE * 5), func(): buy("fpv", "", 5)]])
 		for wk in Gear.WEAPON_ORDER:

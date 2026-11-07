@@ -21,6 +21,15 @@ var shop_pressed := false
 var bag_pressed := false
 var crouch_pressed := false
 var map_pressed := false
+var prone_pressed := false
+var grenade_pressed := false
+var lean_l_pressed := false
+var lean_r_pressed := false
+var shoulder_pressed := false
+var sprint := false        # джойстик витягнуто далеко вперед — біг
+var sprint_lock := false   # біг зафіксовано (відпустив джойстик над колом)
+var prone := false
+var lean := 0
 
 var drone_mode := false
 var aiming := false
@@ -67,6 +76,11 @@ func _buttons() -> Dictionary:
 		"drone": [Vector2(s.x - 300.0 * u, s.y - 370.0 * u), 54.0 * u, "drone", yellow],
 		"shop": [Vector2(70.0 * u, 160.0 * u), 44.0 * u, "shop", green],
 		"bag": [Vector2(70.0 * u, 265.0 * u), 44.0 * u, "bag", white],
+		"shoulder": [Vector2(175.0 * u, 265.0 * u), 36.0 * u, "shoulder", white],
+		"lean_l": [Vector2(70.0 * u, 370.0 * u), 42.0 * u, "lean_l", yellow if lean < 0 else white],
+		"lean_r": [Vector2(175.0 * u, 370.0 * u), 42.0 * u, "lean_r", yellow if lean > 0 else white],
+		"prone": [Vector2(s.x - 585.0 * u, s.y - 92.0 * u), 50.0 * u, "stand" if prone else "prone", yellow if prone else white],
+		"grenade": [Vector2(s.x - 450.0 * u, s.y - 370.0 * u), 48.0 * u, "grenade", Color(0.75, 0.85, 0.45)],
 	}
 
 
@@ -90,6 +104,8 @@ func reset_input() -> void:
 	_held.clear()
 	_held_last.clear()
 	move = Vector2.ZERO
+	sprint = false
+	sprint_lock = false
 	fire = false
 	up = false
 	down = false
@@ -126,18 +142,32 @@ func _input(event: InputEvent) -> void:
 				"bag": bag_pressed = true
 				"crouch": crouch_pressed = true
 				"map": map_pressed = true
+				"prone": prone_pressed = true
+				"grenade": grenade_pressed = true
+				"lean_l": lean_l_pressed = true
+				"lean_r": lean_r_pressed = true
+				"shoulder": shoulder_pressed = true
 				_:
 					if p.x < get_viewport_rect().size.x * 0.42 and _joy_index == -1:
 						_joy_index = event.index
 						_joy_center = p
 						_joy_pos = p
+						if sprint_lock:
+							sprint_lock = false
+							sprint = false
+							move = Vector2.ZERO
 					elif _look_index == -1:
 						_look_index = event.index
 						_look_last = p
 		else:
 			if event.index == _joy_index:
 				_joy_index = -1
-				move = Vector2.ZERO
+				if sprint_lock:
+					move = Vector2(0.0, -1.0)
+					sprint = true
+				else:
+					move = Vector2.ZERO
+					sprint = false
 			if event.index == _look_index:
 				_look_index = -1
 			_held.erase(event.index)
@@ -148,6 +178,9 @@ func _input(event: InputEvent) -> void:
 		if event.index == _joy_index:
 			_joy_pos = p
 			var v := _joy_pos - _joy_center
+			# далеко вперед — біг; ще далі — фіксація бігу
+			sprint = v.y < -JOY_R * 1.05 and absf(v.x) < JOY_R * 0.8
+			sprint_lock = v.y < -JOY_R * 1.75 and absf(v.x) < JOY_R * 0.8
 			if v.length() > JOY_R:
 				v = v.normalized() * JOY_R
 			move = v / JOY_R
@@ -165,10 +198,17 @@ func _draw() -> void:
 	if _joy_index != -1:
 		draw_circle(_joy_center, JOY_R, Color(1, 1, 1, 0.1))
 		draw_circle(_joy_pos, 46.0, Color(1, 1, 1, 0.35))
+		# зона фіксації бігу над джойстиком
+		var lc := _joy_center + Vector2(0.0, -JOY_R * 1.9)
+		draw_circle(lc, 30.0, Color(1, 0.8, 0.15, 0.55 if sprint_lock else 0.18))
+		Icons.draw(self, "sprint", lc, 40.0, Color(1, 1, 1, 0.9))
 	else:
 		var c := Vector2(180.0, s.y - 180.0)
 		draw_arc(c, JOY_R, 0.0, TAU, 48, Color(1, 1, 1, 0.18), 3.0)
 		draw_circle(c, 40.0, Color(1, 1, 1, 0.12))
+		if sprint_lock:
+			draw_circle(c + Vector2(0.0, -JOY_R - 40.0), 30.0, Color(1, 0.8, 0.15, 0.6))
+			Icons.draw(self, "sprint", c + Vector2(0.0, -JOY_R - 40.0), 40.0, Color(1, 1, 1, 0.95))
 	var held := _held.values()
 	var b := _buttons()
 	for k in b:

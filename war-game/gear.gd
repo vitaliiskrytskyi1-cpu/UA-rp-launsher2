@@ -9,6 +9,14 @@ const FPV_PRICE := 400
 const FPV_WEIGHT := 1.5
 const MAG_WEIGHT := 0.5
 
+## Ручна осколкова граната (Ф-1 / РГД-5).
+const GRENADE_PRICE := 150
+const GRENADE_WEIGHT := 0.6
+const GRENADE_RANGE := 35.0
+const GRENADE_FUSE := 3.2
+const GRENADE_RADIUS := 7.0
+const GRENADE_DMG := 150.0
+
 const REWARD_KILL := 150
 const REWARD_HEADSHOT := 50
 const REWARD_DRONE_KILL := 200
@@ -82,6 +90,7 @@ static func new_profile() -> Dictionary:
 		"eq": {"w": "aks74u", "a": "a2", "h": "none", "r": "none", "p": "s", "x": "none"},
 		"kit3": true,
 		"fpv": 1,
+		"gren": 2,
 		"mags": {"aks74u": 6},
 		"heavy_ammo": {"rpg": 0, "mortar": 0},
 	}
@@ -120,13 +129,17 @@ static func drone_slots(eq: Dictionary) -> int:
 	return int(PACK[eq.p].drones)
 
 
+static func grenade_slots(eq: Dictionary) -> int:
+	return int({"none": 1, "light": 2, "assault": 4}.get(eq.r, 1)) + int({"none": 0, "s": 1, "m": 2, "l": 2}.get(eq.p, 0))
+
+
 static func heavy_slots(eq: Dictionary) -> int:
 	return int(PACK[eq.p].heavy)
 
 
-static func weight(eq: Dictionary, mags: int, drones: int, heavy_ammo: int = 0) -> float:
+static func weight(eq: Dictionary, mags: int, drones: int, heavy_ammo: int = 0, gren: int = 0) -> float:
 	var w: float = WEAPONS[eq.w].weight + ARMOR[eq.a].weight + HELMET[eq.h].weight + RIG[eq.r].weight + PACK[eq.p].weight + HEAVY[eq.x].weight
-	w += mags * MAG_WEIGHT + drones * FPV_WEIGHT + heavy_ammo * float(HEAVY[eq.x].ammo_weight)
+	w += mags * MAG_WEIGHT + drones * FPV_WEIGHT + heavy_ammo * float(HEAVY[eq.x].ammo_weight) + gren * GRENADE_WEIGHT
 	return w
 
 

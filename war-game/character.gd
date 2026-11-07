@@ -8,6 +8,19 @@ const Gear = preload("res://gear.gd")
 ## Моделі завантажуються лише на клієнті (сервер їх не використовує).
 static var _soldier_scene: PackedScene
 static var _ak_scene: PackedScene
+static var _wscenes := {}
+## Моделі зброї з текстурами: файл, точка лівої руки (нуль — руків'я).
+const WEAPON_MODELS := {
+	"ak74": ["res://models/ak47.glb", Vector3(-0.035, 0.035, -0.31)],
+	"m4": ["res://models/m4.glb", Vector3(-0.035, 0.045, -0.28)],
+	"svd": ["res://models/svd.glb", Vector3(-0.035, 0.02, -0.33)],
+}
+
+
+static func wscene(path: String) -> PackedScene:
+	if not _wscenes.has(path):
+		_wscenes[path] = load(path)
+	return _wscenes[path]
 
 const RIGHT := Vector3(1, 0, 0)
 const UP := Vector3(0, 1, 0)
@@ -275,7 +288,7 @@ func set_gear(eq: Dictionary, slot: int) -> void:
 	if hx == "rpg" and slot != 1:
 		var hb := _node(gear_root)
 		hb.transform = _back_xform(Vector3(-0.45, 0.89, 0.0), Vector3(0.0, 1.28, back_z + 0.02), 0.0)
-		_build_rpg(hb, Vector3(PI * 0.5, 0.0, 0.0))
+		_build_rpg_model(hb)
 	elif hx == "mortar" and slot != 1:
 		var mb := _node(gear_root)
 		mb.transform = _back_xform(Vector3(-0.45, 0.89, 0.0), Vector3(0.0, 1.25, back_z + 0.02), 0.0)
@@ -288,9 +301,9 @@ func set_gear(eq: Dictionary, slot: int) -> void:
 	if slot == 0:
 		_build_rifle(weapon_root, eq.get("w", "aks74u"))
 	elif slot == 1 and hx == "rpg":
-		_build_rpg(weapon_root, Vector3(PI * 0.5, 0.0, 0.0))
-		_hand_r = Vector3(0.03, -0.12, -0.05)
-		_hand_l = Vector3(-0.03, -0.09, -0.32)
+		_build_rpg_model(weapon_root)
+		_hand_r = Vector3(0.025, 0.0, 0.07)
+		_hand_l = Vector3(-0.04, 0.02, -0.16)
 	elif slot == 1 and hx == "mortar":
 		_cyl(weapon_root, 0.045, 0.8, Vector3(0.0, 0.0, -0.2), mat("olive"), Vector3(PI * 0.5, 0.0, 0.0))
 		_cyl(weapon_root, 0.11, 0.02, Vector3(0.0, 0.0, 0.2), mat("olive"), Vector3(PI * 0.5, 0.0, 0.0))  # опорна плита
@@ -315,6 +328,25 @@ func _back_xform(dir: Vector3, center: Vector3, shift: float) -> Transform3D:
 	return Transform3D(Basis(x, y, z), center - dir.normalized() * shift)
 
 
+func _build_rpg_model(holder: Node3D) -> void:
+	var r: Node3D = wscene("res://models/rpg.glb").instantiate()
+	holder.add_child(r)
+	# постріл ПГ-7 спереду
+	var war := MeshInstance3D.new()
+	var cone := CylinderMesh.new()
+	cone.top_radius = 0.0
+	cone.bottom_radius = 0.045
+	cone.height = 0.2
+	cone.radial_segments = 12
+	war.mesh = cone
+	war.material_override = mat("olive")
+	war.rotation = Vector3(-PI * 0.5, 0.0, 0.0)
+	war.position = Vector3(0.0, 0.06, -0.33)
+	holder.add_child(war)
+	var neck := _cyl(holder, 0.03, 0.08, Vector3(0.0, 0.06, -0.22), mat("olive"), Vector3(PI * 0.5, 0.0, 0.0))
+	neck.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+
+
 func _build_rpg(holder: Node3D, rot: Vector3) -> void:
 	var tube := _cyl(holder, 0.04, 0.95, Vector3.ZERO, mat("olive"), rot)
 	tube.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
@@ -337,7 +369,14 @@ func _build_rpg(holder: Node3D, rot: Vector3) -> void:
 
 
 func _build_rifle(holder: Node3D, w: String) -> void:
-	if w == "ak74" or w == "aks74u":
+	if WEAPON_MODELS.has(w):
+		var wm: Node3D = wscene(WEAPON_MODELS[w][0]).instantiate()
+		holder.add_child(wm)
+		if holder == weapon_root:
+			_hand_r = Vector3(0.025, 0.0, 0.075)
+			_hand_l = WEAPON_MODELS[w][1]
+		return
+	if w == "aks74u":
 		var ak: Node3D = _ak_scene.instantiate()
 		if w == "aks74u":
 			ak.scale = Vector3(1.0, 1.0, 0.86)
@@ -475,63 +514,140 @@ func _pose_arm(side: String, q_parent: Quaternion, d1: Vector3, f1: Vector3, q_b
 
 # ---------------------------------------------------------------- анімація
 
+var prone := false
+var lean := 0.0            # -1 вліво, +1 вправо
+var sprint := false
+var airborne := false
+var move_local := Vector2.ZERO   # напрям руху відносно персонажа: x праворуч, y вперед
+var _prone_k := 0.0
+var _lean_k := 0.0
+var _sprint_k := 0.0
+var _air_k := 0.0
+var _land_t := 0.0
+var _speed_s := 0.0
+var _dir_s := Vector2(0.0, 1.0)
+var _last_yaw := 0.0
+var _turn_s := 0.0
+var _throw_t := 0.0
+
+
 func set_pose(is_crouch: bool, is_aiming: bool) -> void:
 	crouch = is_crouch
 	aiming = is_aiming
 
 
+func set_move_state(is_prone: bool, lean_v: float, is_sprint: bool, is_air: bool) -> void:
+	if airborne and not is_air:
+		_land_t = 0.35
+	prone = is_prone
+	lean = lean_v
+	sprint = is_sprint
+	airborne = is_air
+
+
+func throw_grenade() -> void:
+	_throw_t = 0.7
+
+
 func animate(speed: float, delta: float) -> void:
 	if skel == null or not is_visible_in_tree():
 		return
-	_crouch_k = move_toward(_crouch_k, 1.0 if crouch else 0.0, delta * 5.0)
-	_aim_k = move_toward(_aim_k, 1.0 if (aiming and _slot == 0) else 0.0, delta * 7.0)
-	var k := clampf(speed / 5.0, 0.0, 1.5)
-	_move_k = lerpf(_move_k, clampf(k * 3.0, 0.0, 1.0), clampf(delta * 8.0, 0.0, 1.0))
-	if k > 0.05:
-		_phase += delta * (4.2 + speed * 1.25)
+	var dt := clampf(delta, 0.0, 0.1)
+	_crouch_k = move_toward(_crouch_k, 1.0 if (crouch and not prone) else 0.0, dt * 4.5)
+	_prone_k = move_toward(_prone_k, 1.0 if prone else 0.0, dt * 2.6)
+	_aim_k = move_toward(_aim_k, 1.0 if (aiming and _slot == 0 and not sprint) else 0.0, dt * 7.0)
+	_sprint_k = move_toward(_sprint_k, 1.0 if (sprint and not prone) else 0.0, dt * 4.0)
+	_lean_k = lerpf(_lean_k, clampf(lean, -1.0, 1.0), clampf(dt * 8.0, 0.0, 1.0))
+	_air_k = move_toward(_air_k, 1.0 if airborne else 0.0, dt * 6.0)
+	_land_t = maxf(0.0, _land_t - dt)
+	_throw_t = maxf(0.0, _throw_t - dt)
+	# плавна швидкість і напрям — без ривків між станами
+	_speed_s = lerpf(_speed_s, speed, clampf(dt * 7.0, 0.0, 1.0))
+	if move_local.length() > 0.1:
+		_dir_s = _dir_s.lerp(move_local.normalized(), clampf(dt * 8.0, 0.0, 1.0))
+	# поворот на місці — переступання ногами
+	var gy := global_rotation.y
+	var turn := wrapf(gy - _last_yaw, -PI, PI) / maxf(dt, 0.001)
+	_last_yaw = gy
+	_turn_s = lerpf(_turn_s, clampf(turn, -6.0, 6.0), clampf(dt * 6.0, 0.0, 1.0))
+	var turn_k := clampf((absf(_turn_s) - 0.8) / 3.0, 0.0, 0.35) * clampf(1.0 - _speed_s, 0.0, 1.0)
+
+	var k := clampf(_speed_s / 5.0, 0.0, 1.6)
+	var kk := maxf(k, turn_k)
+	if kk > 0.03:
+		_phase += dt * (4.0 + _speed_s * 1.2 + turn_k * 6.0) * (0.55 if _prone_k > 0.5 else 1.0)
 	else:
-		_phase = lerpf(_phase, roundf(_phase / PI) * PI, clampf(delta * 5.0, 0.0, 1.0))
-	_breath += delta * 1.6
-	var c := _crouch_k
+		_phase = lerpf(_phase, roundf(_phase / PI) * PI, clampf(dt * 4.0, 0.0, 1.0))
+	_breath += dt * (1.6 + _sprint_k * 1.4)
+	_move_k = lerpf(_move_k, clampf(k * 3.0, 0.0, 1.0), clampf(dt * 6.0, 0.0, 1.0))
+	var c := _crouch_k * (1.0 - _prone_k)
+	var pk := _prone_k
+	var stand := 1.0 - pk
 	var mk := _move_k
-	var sw := sin(_phase) * 0.55 * k
-	var lift_l := maxf(0.0, sin(_phase + PI * 0.5)) * 1.05 * k
-	var lift_r := maxf(0.0, sin(_phase - PI * 0.5)) * 1.05 * k
 	var hold := _slot != 2
+	var sk := _sprint_k
+	var lk := _lean_k * stand
+	var ak := _air_k * stand
+
+	# напрям кроку: вісь махання ноги перпендикулярна руху
+	var mdir := Vector3(_dir_s.x, 0.0, -_dir_s.y)
+	if mdir.length() < 0.2:
+		mdir = FWD
+	mdir = mdir.normalized()
+	var swing_ax := mdir.cross(UP).normalized()
+	var stride := 0.5 + sk * 0.25
+	var sw := sin(_phase) * stride * kk
+	var lift_l := maxf(0.0, sin(_phase + PI * 0.5)) * (1.0 + sk * 0.5) * kk
+	var lift_r := maxf(0.0, sin(_phase - PI * 0.5)) * (1.0 + sk * 0.5) * kk
 
 	# --- таз
-	var kneel := c * (1.0 - mk)      # на коліні, коли стоїть
-	var duck := c * mk               # гусячий крок
-	var drop := kneel * 0.44 + duck * 0.3 - absf(sin(_phase)) * 0.03 * k * (1.0 - c)
-	var hips_off := Vector3(0.0, -drop, kneel * 0.04)
-	var blade := (0.12 if hold else 0.0) * (1.0 - mk * 0.7)
-	var q_h := Quaternion(UP, -blade - sin(_phase) * 0.08 * k) * Quaternion(RIGHT, -0.06 * k - duck * 0.2)
+	var kneel := c * (1.0 - mk)
+	var duck := c * mk
+	var bounce := absf(sin(_phase)) * (0.03 + sk * 0.03) * k * (1.0 - c) * stand
+	var land := sin(clampf(_land_t / 0.35, 0.0, 1.0) * PI) * 0.12
+	var drop := (kneel * 0.44 + duck * 0.3 - bounce + land) * stand
+	var hips_off := Vector3(lk * -0.03, -drop + ak * 0.02, kneel * 0.04)
+	hips_off = hips_off.lerp(Vector3(0.0, 0.2 - 1.014, 0.25), pk)
+	hips_off.x += sin(_phase) * 0.03 * k * stand  # перенесення ваги з ноги на ногу
+	var blade := (0.12 if hold else 0.0) * (1.0 - mk * 0.7) * stand
+	var hip_roll := sin(_phase) * 0.05 * k * stand
+	var q_h := Quaternion(UP, -blade - sin(_phase) * (0.08 + sk * 0.04) * k + pk * sin(_phase) * 0.12 * k) \
+		* Quaternion(RIGHT, (-0.06 * k - duck * 0.2 - sk * 0.12) * stand - PI * 0.5 * pk) * Quaternion(BACK_Z, hip_roll)
 	var ih := _bi("Hips")
 	var p_h: Vector3 = RP[ih] + hips_off
 	skel.set_bone_pose_position(ih, _to_skel * p_h)
 	_set_abs(ih, q_h, Quaternion.IDENTITY)
 
 	# --- ноги
-	var hl := sw * (1.0 - c) + kneel * 1.45 + duck * (0.8 + sw * 0.5)
-	var hr := -sw * (1.0 - c) + kneel * 0.2 + duck * (0.8 - sw * 0.5)
-	var kl := lift_l * (1.0 - c) + kneel * 1.45 + duck * (1.3 + lift_l * 0.4)
-	var kr := lift_r * (1.0 - c) + kneel * 1.77 + duck * (1.3 + lift_r * 0.4)
-	var leg_yaw := Quaternion(UP, blade)  # ноги дивляться вперед, коли таз розвернутий
-	_set_rel(_bi("LeftUpLeg"), leg_yaw * Quaternion(RIGHT, hl) * Quaternion(BACK_Z, -0.04))
-	_set_rel(_bi("RightUpLeg"), leg_yaw * Quaternion(RIGHT, hr) * Quaternion(BACK_Z, 0.04 + kneel * 0.08))
-	_set_rel(_bi("LeftLeg"), Quaternion(RIGHT, -kl))
-	_set_rel(_bi("RightLeg"), Quaternion(RIGHT, -kr))
-	_set_rel(_bi("LeftFoot"), Quaternion(RIGHT, clampf(kl - hl, -0.6, 0.9) * (1.0 - kneel) + kneel * 0.0))
-	_set_rel(_bi("RightFoot"), Quaternion(RIGHT, clampf(kr - hr, -0.6, 0.9) * (1.0 - kneel) + kneel * 0.75))
+	var leg_yaw := Quaternion(UP, blade)
+	var air_h := ak * 0.55
+	var air_kn := ak * 1.0
+	var hl := sw * (1.0 - c) * stand + kneel * 1.45 + duck * (0.8 + sw * 0.5) + air_h
+	var hr := -sw * (1.0 - c) * stand + kneel * 0.2 + duck * (0.8 - sw * 0.5) + air_h * 0.6
+	var kl := lift_l * (1.0 - c) * stand + kneel * 1.45 + duck * (1.3 + lift_l * 0.4) + air_kn + land * 2.0
+	var kr := lift_r * (1.0 - c) * stand + kneel * 1.77 + duck * (1.3 + lift_r * 0.4) + air_kn * 0.7 + land * 2.0
+	# повзання: ноги по черзі згинаються в сторону
+	var crawl_l := maxf(0.0, sin(_phase)) * 0.9 * k * pk
+	var crawl_r := maxf(0.0, -sin(_phase)) * 0.9 * k * pk
+	var swing_l := Quaternion(swing_ax, hl - (kneel * 1.45 + duck * 0.8 + air_h)) * Quaternion(RIGHT, kneel * 1.45 + duck * 0.8 + air_h)
+	var swing_r := Quaternion(swing_ax, hr - (kneel * 0.2 + duck * 0.8 + air_h * 0.6)) * Quaternion(RIGHT, kneel * 0.2 + duck * 0.8 + air_h * 0.6)
+	_set_rel(_bi("LeftUpLeg"), leg_yaw * swing_l * Quaternion(BACK_Z, -0.04 - pk * 0.12 - crawl_l * 0.6))
+	_set_rel(_bi("RightUpLeg"), leg_yaw * swing_r * Quaternion(BACK_Z, 0.04 + kneel * 0.08 + pk * 0.12 + crawl_r * 0.6))
+	_set_rel(_bi("LeftLeg"), Quaternion(RIGHT, -kl - crawl_l * 1.3))
+	_set_rel(_bi("RightLeg"), Quaternion(RIGHT, -kr - crawl_r * 1.3))
+	_set_rel(_bi("LeftFoot"), Quaternion(RIGHT, clampf(kl - hl, -0.6, 0.9) * (1.0 - kneel) * stand + pk * -0.4))
+	_set_rel(_bi("RightFoot"), Quaternion(RIGHT, clampf(kr - hr, -0.6, 0.9) * (1.0 - kneel) * stand + kneel * 0.75 + pk * -0.4))
 
 	# --- корпус
-	var lean := 0.07 * k + kneel * 0.12 + duck * 0.2 + _aim_k * 0.05
-	var pitch := clampf(look_pitch, -1.2, 1.2) if hold else clampf(look_pitch, -1.2, 1.2) * 0.4
-	var br := sin(_breath) * 0.015
+	var lean_f := (0.07 * k + kneel * 0.12 + duck * 0.2 + _aim_k * 0.05 + sk * 0.3) * stand
+	var pitch := clampf(look_pitch, -1.2, 1.2) * (1.0 if hold else 0.4)
+	var pitch_p := pitch * stand + clampf(look_pitch, -0.3, 0.6) * pk * 0.6
+	var br := sin(_breath) * (0.015 + sk * 0.01)
 	var twist := blade / 3.0
-	var e_sp := Quaternion(UP, twist) * Quaternion(RIGHT, -lean * 0.4 + pitch * 0.22 + br)
-	var e_sp1 := Quaternion(UP, twist) * Quaternion(RIGHT, -lean * 0.3 + pitch * 0.22 - br * 0.5)
-	var e_sp2 := Quaternion(UP, twist + sin(_phase) * 0.05 * k) * Quaternion(RIGHT, -lean * 0.3 + pitch * 0.22)
+	var roll := -lk * 0.2 + sin(_phase) * 0.03 * k * stand
+	var e_sp := Quaternion(UP, twist) * Quaternion(RIGHT, -lean_f * 0.4 + pitch_p * 0.22 + br + pk * 0.08) * Quaternion(BACK_Z, roll)
+	var e_sp1 := Quaternion(UP, twist) * Quaternion(RIGHT, -lean_f * 0.3 + pitch_p * 0.22 - br * 0.5 + pk * 0.06) * Quaternion(BACK_Z, roll)
+	var e_sp2 := Quaternion(UP, twist + sin(_phase) * 0.06 * k * stand - _turn_s * 0.02) * Quaternion(RIGHT, -lean_f * 0.3 + pitch_p * 0.22) * Quaternion(BACK_Z, roll)
 	var isp := _bi("Spine")
 	var isp1 := _bi("Spine1")
 	var isp2 := _bi("Spine2")
@@ -545,11 +661,12 @@ func animate(speed: float, delta: float) -> void:
 	var p_sp1 := _child_pos(isp1, isp, p_sp, q_sp)
 	var p_sp2 := _child_pos(isp2, isp1, p_sp1, q_sp1)
 
-	# голова
+	# голова: стабілізується, дивиться вперед навіть лежачи
 	var ine := _bi("Neck")
 	var ihd := _bi("Head")
-	var e_ne := Quaternion(RIGHT, pitch * 0.17 - lean * 0.2)
-	var e_hd := Quaternion(RIGHT, pitch * 0.17 - _aim_k * 0.12 + kneel * 0.1) * Quaternion(BACK_Z, -_aim_k * 0.1)
+	var e_ne := Quaternion(RIGHT, pitch * 0.17 * stand - lean_f * 0.2 + pk * 0.75) * Quaternion(BACK_Z, -roll * 1.2)
+	var e_hd := Quaternion(RIGHT, pitch * 0.17 * stand - _aim_k * 0.12 + kneel * 0.1 + pk * 0.55) * Quaternion(BACK_Z, -_aim_k * 0.1 + lk * 0.1) \
+		* Quaternion(UP, -sin(_phase) * 0.05 * k * stand)
 	_set_rel(ine, e_ne)
 	_set_rel(ihd, e_hd)
 	var q_ne := q_sp2 * e_ne
@@ -561,21 +678,25 @@ func animate(speed: float, delta: float) -> void:
 	hips_gear.transform = _frame(ih, p_h, q_h)
 	head_gear.transform = _frame(ihd, p_hd, q_hd)
 
-	# --- зброя (у просторі грудей)
+	# --- зброя
 	var wt := Transform3D.IDENTITY
-	var bob := sin(_phase * 2.0) * 0.012 * k
+	var bob := sin(_phase * 2.0) * (0.012 + sk * 0.02) * k
+	var wpiv: Vector3 = RP[isp2]
 	if _slot == 0:
 		var ready := Transform3D(Basis(UP, 0.28) * Basis(RIGHT, -0.45), Vector3(0.13, 1.12 + bob, -0.29))
 		var aim := Transform3D(Basis(UP, 0.03), Vector3(0.085, 1.45 + bob * 0.3, -0.24))
-		wt = ready.interpolate_with(aim, _aim_k)
+		var run := Transform3D(Basis(UP, 0.75) * Basis(RIGHT, 0.45) * Basis(BACK_Z, 0.6), Vector3(0.1, 1.18 + bob, -0.24))
+		wt = ready.interpolate_with(run, sk).interpolate_with(aim, _aim_k)
 	elif _slot == 1 and _eq.get("x", "") == "rpg":
-		wt = Transform3D(Basis(RIGHT, 0.04), Vector3(0.14, 1.57, 0.02))
+		wt = Transform3D(Basis(RIGHT, 0.04), Vector3(0.15, 1.5 + bob * 0.5, -0.2))
 	elif _slot == 1:
 		wt = Transform3D(Basis(UP, 0.3) * Basis(RIGHT, 0.7), Vector3(0.08, 1.1 + bob, -0.3))
-	# зброя слідує за поглядом і положенням грудей, але не за нахилом корпусу
-	var wpiv: Vector3 = RP[isp2]
-	var wq := Quaternion(UP, sin(_phase) * 0.03 * k) * Quaternion(RIGHT, pitch * 0.66)
-	weapon_root.transform = Transform3D(Basis(wq), p_sp2) * Transform3D(Basis(), -wpiv) * wt
+	# лежачи: зброя вперед, на рівні землі
+	var prone_wt := Transform3D(Basis(UP, 0.04), wpiv + Vector3(0.07, -0.08 + bob * 0.5, -0.42))
+	var wq := Quaternion(UP, sin(_phase) * 0.03 * k - _turn_s * 0.025) * Quaternion(RIGHT, pitch * 0.66 * stand) * Quaternion(BACK_Z, -lk * 0.25)
+	var w_stand := Transform3D(Basis(wq), p_sp2) * Transform3D(Basis(), -wpiv) * wt
+	var w_prone := Transform3D(Basis(Quaternion(RIGHT, clampf(look_pitch, -0.2, 0.5) * 0.5)), p_sp2) * Transform3D(Basis(), -wpiv) * prone_wt
+	weapon_root.transform = w_stand.interpolate_with(w_prone, pk) if pk > 0.001 else w_stand
 	weapon_root.visible = _slot != 2
 
 	# --- руки
@@ -591,20 +712,32 @@ func animate(speed: float, delta: float) -> void:
 	var p_ar := _child_pos(_bi("RightArm"), ish_r, p_shr, q_shr)
 	var qa_l: Quaternion
 	var qa_r: Quaternion
-	if hold:
+	var throwing := _throw_t > 0.0
+	if hold or throwing:
 		var wtr := weapon_root.transform
 		var pole_r := q_sp2 * Vector3(0.7, -1.0, 0.3).lerp(Vector3(1.0, -0.35, 0.3), _aim_k)
 		var pole_l := q_sp2 * Vector3(-0.4, -1.0, -0.1)
-		qa_r = _solve_arm("Right", q_shr, p_ar, wtr * _hand_r, pole_r, q_sp2)
-		qa_l = _solve_arm("Left", q_shl, p_al, wtr * _hand_l, pole_l, q_sp2)
-	else:
+		var tr := wtr * _hand_r
+		if throwing:
+			# замах і кидок гранати правою рукою
+			var tt := 1.0 - _throw_t / 0.7
+			var back_p := p_sp2 + q_sp2 * Vector3(0.22, 0.42, 0.28)
+			var front_p := p_sp2 + q_sp2 * Vector3(0.18, 0.2, -0.55)
+			tr = back_p.lerp(front_p, smoothstep(0.35, 0.75, tt))
+			pole_r = q_sp2 * Vector3(1.0, 0.2, 0.3)
+		if hold or throwing:
+			qa_r = _solve_arm("Right", q_shr, p_ar, tr, pole_r, q_sp2)
+		if hold:
+			qa_l = _solve_arm("Left", q_shl, p_al, wtr * _hand_l, pole_l, q_sp2)
+	if not hold:
 		var asw := sw * 0.9
 		var dl := q_sp2 * (Quaternion(RIGHT, -asw) * Vector3(-0.16, -1.0, 0.0).normalized())
 		var fl := q_sp2 * (Quaternion(RIGHT, -asw + 0.35 + maxf(0.0, -asw) * 0.6) * Vector3(-0.05, -1.0, 0.0).normalized())
-		var dr := q_sp2 * (Quaternion(RIGHT, asw) * Vector3(0.16, -1.0, 0.0).normalized())
-		var fr := q_sp2 * (Quaternion(RIGHT, asw + 0.35 + maxf(0.0, asw) * 0.6) * Vector3(0.05, -1.0, 0.0).normalized())
 		qa_l = _pose_arm("Left", q_shl, dl, fl, q_sp2)
-		qa_r = _pose_arm("Right", q_shr, dr, fr, q_sp2)
+		if not throwing:
+			var dr := q_sp2 * (Quaternion(RIGHT, asw) * Vector3(0.16, -1.0, 0.0).normalized())
+			var fr := q_sp2 * (Quaternion(RIGHT, asw + 0.35 + maxf(0.0, asw) * 0.6) * Vector3(0.05, -1.0, 0.0).normalized())
+			qa_r = _pose_arm("Right", q_shr, dr, fr, q_sp2)
 	# пов'язки на плечах
 	var ial := _bi("LeftArm")
 	var iar := _bi("RightArm")
@@ -614,4 +747,3 @@ func animate(speed: float, delta: float) -> void:
 	var rb: Vector3 = RP[iar]
 	band_l.transform = _frame(ial, p_al, qa_l) * Transform3D(Basis(), ra + bl * 0.42)
 	band_r.transform = _frame(iar, p_ar, qa_r) * Transform3D(Basis(), rb + brr * 0.42)
-
