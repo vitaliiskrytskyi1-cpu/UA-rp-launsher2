@@ -34,6 +34,7 @@ var mags := 1
 var drones := 0
 var heavy_ammo := 0
 var grenades := 0
+var medkits := 0
 var prone := false
 var lean := 0
 var lean_k := 0.0
@@ -111,8 +112,9 @@ func setup(m, t, is_bot: bool) -> void:
 	arm.add_child(cam)
 
 
-func apply_loadout(new_eq: Dictionary, n_in_mag: int, n_mags: int, n_drones: int, n_heavy: int, n_gren: int = 0) -> void:
+func apply_loadout(new_eq: Dictionary, n_in_mag: int, n_mags: int, n_drones: int, n_heavy: int, n_gren: int = 0, n_med: int = 0) -> void:
 	grenades = n_gren
+	medkits = n_med
 	eq = new_eq.duplicate()
 	wdata = Gear.WEAPONS.get(eq.w, Gear.WEAPONS["aks74u"])
 	in_mag = n_in_mag
@@ -127,7 +129,7 @@ func apply_loadout(new_eq: Dictionary, n_in_mag: int, n_mags: int, n_drones: int
 
 
 func _recalc_weight() -> void:
-	var w := Gear.weight(eq, mags, drones, heavy_ammo, grenades)
+	var w := Gear.weight(eq, mags, drones, heavy_ammo, grenades, medkits)
 	speed_mult = Gear.speed_mult(w)
 	if slot == 2:
 		speed_mult = minf(speed_mult + 0.1, 1.15)
@@ -237,6 +239,23 @@ func set_aim(on: bool) -> void:
 	_update_labels()
 
 
+## Вибір слота з панелі: повторне натискання на поточну зброю — сховати її.
+func select_slot(n: int) -> void:
+	if n == slot:
+		n = 2
+	if n == 1 and eq.x == "none":
+		n = 2
+	if n == slot:
+		return
+	slot = n
+	reloading = 0.0
+	set_aim(false)
+	model.set_gear(eq, slot)
+	_recalc_weight()
+	main.send_slot(slot)
+	Sfx.play(main, "reload", null, -8.0, 1.4)
+
+
 func switch_slot() -> void:
 	var next := (slot + 1) % 3
 	if next == 1 and eq.x == "none":
@@ -287,6 +306,9 @@ func _physics_process(delta: float) -> void:
 	var want_lean := 0
 	var want_shoulder := false
 	var sprint_in := false
+	var want_stand := false
+	var want_med := false
+	var want_select := -1
 
 	if bot:
 		bot_age += delta
@@ -353,6 +375,12 @@ func _physics_process(delta: float) -> void:
 			if touch.lean_r_pressed:
 				want_lean = 1
 			sprint_in = touch.sprint
+			want_stand = touch.stand_pressed
+			want_med = touch.med_pressed
+			want_select = touch.slot_select
+			touch.stand_pressed = false
+			touch.med_pressed = false
+			touch.slot_select = -1
 			touch.prone_pressed = false
 			touch.grenade_pressed = false
 			touch.shoulder_pressed = false
@@ -390,6 +418,7 @@ func _physics_process(delta: float) -> void:
 			sprint_in = sprint_in or Input.is_physical_key_pressed(KEY_SHIFT)
 		want_prone = want_prone or _take_key(KEY_Z)
 		want_gren = want_gren or _take_key(KEY_G)
+		want_med = want_med or _take_key(KEY_H)
 		want_shoulder = want_shoulder or _take_key(KEY_V)
 		if _take_key(KEY_1):
 			want_lean = -1
@@ -421,6 +450,15 @@ func _physics_process(delta: float) -> void:
 			set_crouch(not crouching)
 		if want_prone:
 			set_prone(not prone)
+		if want_stand:
+			if prone:
+				set_prone(false)
+			elif crouching:
+				set_crouch(false)
+		if want_med:
+			main.use_medkit()
+		if want_select >= 0:
+			select_slot(want_select)
 		if want_shoulder:
 			shoulder = -shoulder
 		if want_lean != 0:

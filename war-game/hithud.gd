@@ -86,7 +86,8 @@ func _draw() -> void:
 		draw_arc(c, 170.0, a - 0.32, a + 0.32, 20, Color(1.0, 0.1, 0.05, 0.85 * al), 12.0)
 		draw_arc(c, 186.0, a - 0.18, a + 0.18, 14, Color(1.0, 0.3, 0.2, 0.6 * al), 5.0)
 	# силует з зонами під грошима
-	draw_body(self, Vector2(vs.x - 262.0, 14.0), 120.0, main.zone_dmg, main.zone_flash, 0.85)
+	var u := minf(vs.x / 1280.0, vs.y / 720.0)
+	draw_body(self, Vector2(vs.x * 0.5 - 312.0 * u, 6.0 * u), 72.0 * u, main.zone_dmg, main.zone_flash, 0.85)
 	# маркер влучання для стрільця
 	if mark_t > 0.0:
 		var col := Color(1.0, 0.25, 0.2, mark_t / 0.35) if mark_zone == 0 else Color(1, 1, 1, mark_t / 0.35)

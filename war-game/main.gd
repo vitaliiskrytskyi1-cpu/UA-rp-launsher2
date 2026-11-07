@@ -12,9 +12,10 @@ const Sfx = preload("res://sfx.gd")
 const HudMap = preload("res://hudmap.gd")
 const Inventory = preload("res://inventory.gd")
 const HitHud = preload("res://hithud.gd")
+const TopHud = preload("res://tophud.gd")
 static var _fpv_scene: PackedScene
 
-const VERSION := 6
+const VERSION := 7
 const DEFAULT_ADDR := "147.185.221.217:11983"
 const DEFAULT_PORT := 7000
 const MAX_PLAYERS := 40
@@ -93,6 +94,8 @@ var minimap: Control
 var bigmap: Control
 var bag: Control
 var hithud: Control
+var tophud: Control
+var heal_left := 0.0
 ## Пошкодження по зонах тіла (для рюкзака і HUD): 0 голова … 6 права нога, 7 вибух.
 var zone_dmg := [0, 0, 0, 0, 0, 0, 0, 0]
 var zone_flash := [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -123,6 +126,17 @@ func _ready() -> void:
 		is_bot = true
 		_build_client_world()
 		connect_to(host, cfg_port, "Bot_%d" % (randi() % 1000))
+	elif args.has("--autojoin"):
+		# перевірка інтерфейсу: вхід без меню і знімок екрана
+		_build_client_world()
+		_build_ui()
+		connect_to(host, cfg_port, "Tester")
+		for a2 in args:
+			if a2.begins_with("--shot="):
+				var path := a2.substr(7)
+				get_tree().create_timer(18.0).timeout.connect(func():
+					get_viewport().get_texture().get_image().save_png(path)
+					get_tree().quit())
 	else:
 		_build_client_world()
 		_build_ui()
@@ -195,7 +209,7 @@ func _new_pdata(nick: String, team: int, prof: Dictionary) -> Dictionary:
 		"dpos": Vector3.ZERO, "dyaw": 0.0, "kills": 0, "deaths": 0,
 		"respawn": 0.0, "drone_t": 0.0, "last_fire": 0, "last_heavy": 0,
 		"in_mag": 0, "mags": 0, "drones": 0, "heavy": 0, "crouch": false,
-		"flags": 0, "aim": false, "gren": 0, "armor_dur": 100.0, "helm_dur": 100.0, "last_gren": 0,
+		"flags": 0, "aim": false, "gren": 0, "armor_dur": 100.0, "helm_dur": 100.0, "last_gren": 0, "med": 0, "heal_t": 0.0,
 	}
 
 
@@ -222,6 +236,10 @@ func _equip(id: int) -> void:
 		var ht := mini(hs, Gear.heavy_slots(eq))
 		prof.heavy_ammo[eq.x] = hs - ht
 		p.heavy = ht
+	var mt := mini(int(prof.get("med", 0)), Gear.medkit_slots(eq))
+	prof.med = int(prof.get("med", 0)) - mt
+	p.med = mt
+	p.heal_t = 0.0
 	var gt := mini(int(prof.get("gren", 0)), Gear.grenade_slots(eq))
 	prof.gren = int(prof.get("gren", 0)) - gt
 	p.gren = gt
@@ -244,6 +262,8 @@ func _return_carried(id: int) -> void:
 	if eq.x != "none":
 		prof.heavy_ammo[eq.x] = int(prof.heavy_ammo.get(eq.x, 0)) + int(p.heavy)
 	prof.gren = int(prof.get("gren", 0)) + int(p.gren)
+	prof.med = int(prof.get("med", 0)) + int(p.med)
+	p.med = 0
 	p.mags = 0
 	p.in_mag = 0
 	p.drones = 0
@@ -253,7 +273,7 @@ func _return_carried(id: int) -> void:
 
 func _send_loadout(id: int) -> void:
 	var p: Dictionary = players[id]
-	rpc_id(id, "cl_loadout", p.prof, p.in_mag, p.mags, p.drones, p.heavy, p.gren, int(p.armor_dur), int(p.helm_dur))
+	rpc_id(id, "cl_loadout", p.prof, p.in_mag, p.mags, p.drones, p.heavy, p.gren, int(p.armor_dur), int(p.helm_dur), int(p.med))
 
 
 func _server_spawn(id: int) -> void:
@@ -468,6 +488,35 @@ func srv_mortar(target: Vector3) -> void:
 
 
 @rpc("any_peer", "call_remote", "reliable")
+func srv_heal() -> void:
+	if not is_server:
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if not players.has(id):
+		return
+	var p: Dictionary = players[id]
+	if not p.alive or int(p.med) <= 0 or int(p.hp) >= 100 or float(p.heal_t) > 0.0:
+		return
+	p.heal_t = Gear.MEDKIT_TIME
+	rpc_id(id, "cl_heal_start", Gear.MEDKIT_TIME)
+
+
+func _update_heals(delta: float) -> void:
+	for pid in players:
+		var p: Dictionary = players[pid]
+		if float(p.get("heal_t", 0.0)) <= 0.0:
+			continue
+		p.heal_t = float(p.heal_t) - delta
+		if not p.alive:
+			p.heal_t = 0.0
+		elif float(p.heal_t) <= 0.0:
+			p.heal_t = 0.0
+			p.med = int(p.med) - 1
+			p.hp = mini(100, int(p.hp) + Gear.MEDKIT_HEAL)
+			rpc_id(pid, "cl_healed", int(p.hp), int(p.med))
+
+
+@rpc("any_peer", "call_remote", "reliable")
 func srv_grenade(target: Vector3) -> void:
 	if not is_server:
 		return
@@ -577,6 +626,14 @@ func srv_buy(cat: String, key: String, qty: int) -> void:
 			_spend(prof, cost)
 			prof.mags[key] = int(prof.mags.get(key, 0)) + qty
 			msg = "Куплено магазинів: %d" % qty
+		"med":
+			var cost := Gear.MEDKIT_PRICE * qty
+			if int(prof.money) < cost:
+				rpc_id(id, "cl_msg", "Недостатньо грошей.")
+				return
+			_spend(prof, cost)
+			prof.med = int(prof.get("med", 0)) + qty
+			msg = "Куплено аптечок: %d" % qty
 		"gren":
 			var cost := Gear.GRENADE_PRICE * qty
 			if int(prof.money) < cost:
@@ -598,7 +655,7 @@ func srv_buy(cat: String, key: String, qty: int) -> void:
 		_:
 			return
 	# поповнення на базі
-	if p.alive and _in_base(p) and cat in ["fpv", "mag", "hammo", "gren"]:
+	if p.alive and _in_base(p) and cat in ["fpv", "mag", "hammo", "gren", "med"]:
 		_return_carried(id)
 		_equip(id)
 	_save_profile(id)
@@ -799,6 +856,8 @@ func _kill(vid: int, kid: int, head: bool = false) -> void:
 	v.drones = 0
 	v.heavy = 0
 	v.gren = 0
+	v.med = 0
+	v.heal_t = 0.0
 	_save_profile(vid)
 	var kname := ""
 	if players.has(kid) and kid != vid:
@@ -896,6 +955,7 @@ func _update_projectiles(delta: float) -> void:
 
 
 func _update_mortars(delta: float) -> void:
+	_update_heals(delta)
 	if mortar_impacts.is_empty():
 		return
 	var keep: Array = []
@@ -1181,6 +1241,7 @@ func bot_shop_test() -> void:
 	buy("mag", "aks74u", 2)
 	buy("h", "h1")
 	buy("gren", "", 2)
+	buy("med", "", 1)
 	print("[BOT] shop test sent")
 
 
@@ -1271,12 +1332,12 @@ func cl_gear(id: int, eq: Dictionary, slot: int) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
-func cl_loadout(prof: Dictionary, in_mag: int, mags: int, drones: int, heavy: int, gren: int, adur: int, hdur: int) -> void:
+func cl_loadout(prof: Dictionary, in_mag: int, mags: int, drones: int, heavy: int, gren: int, adur: int, hdur: int, med: int) -> void:
 	profile = prof
 	armor_dur = adur
 	helm_dur = hdur
 	if soldier:
-		soldier.apply_loadout(prof.eq, in_mag, mags, drones, heavy, gren)
+		soldier.apply_loadout(prof.eq, in_mag, mags, drones, heavy, gren, med)
 	if shop and shop.visible:
 		_refresh_shop()
 	if is_bot:
@@ -1407,6 +1468,41 @@ func cl_hp(hp: int, zone: int, dmg: int, from: Vector3, adur: int, hdur: int) ->
 
 
 @rpc("authority", "call_remote", "reliable")
+func cl_heal_start(t: float) -> void:
+	heal_left = t
+	Sfx.play(self, "reload", null, -6.0, 0.7)
+
+
+@rpc("authority", "call_remote", "reliable")
+func cl_healed(hp: int, med: int) -> void:
+	my_hp = hp
+	heal_left = 0.0
+	if soldier:
+		soldier.medkits = med
+		soldier._recalc_weight()
+	# перев'язані рани
+	for zi in 8:
+		zone_dmg[zi] = int(int(zone_dmg[zi]) * 0.4)
+	_show_center("Здоров'я відновлено: %d" % hp, 1.2)
+	if is_bot:
+		print("[BOT] healed to %d" % hp)
+
+
+func use_medkit() -> void:
+	if soldier == null or not alive_local:
+		return
+	if soldier.medkits <= 0:
+		show_hint("Немає аптечок. Купіть у магазині.")
+		return
+	if my_hp >= 100:
+		show_hint("Здоров'я повне.")
+		return
+	if heal_left > 0.0:
+		return
+	rpc_id(1, "srv_heal")
+
+
+@rpc("authority", "call_remote", "reliable")
 func cl_grenade(id: int, from: Vector3, target: Vector3, flight: float, fuse: float) -> void:
 	if world == null:
 		return
@@ -1529,6 +1625,8 @@ func cl_round_start() -> void:
 		players[id].kills = 0
 		players[id].deaths = 0
 	_show_center("Новий раунд! В бій!", 2.0)
+	if tophud:
+		tophud.round_t = 0.0
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -1747,11 +1845,10 @@ func _update_hud(delta: float) -> void:
 	if soldier and alive_local:
 		if soldier.drone_active:
 			ammo_lbl.text = "FPV • швидкість %d • висота %d м • батарея %d с" % [soldier.drone_speed_mode + 1, int(soldier.drone_node.global_position.y) if soldier.drone_node else 0, int(drone_time)]
+		elif heal_left > 0.0:
+			ammo_lbl.text = "Перев'язка... %.1f с" % heal_left
 		elif soldier.slot == 0:
-			if soldier.reloading > 0.0:
-				ammo_lbl.text = "ПЕРЕЗАРЯДКА..."
-			else:
-				ammo_lbl.text = "%s  %d / %d×%d" % [soldier.wdata.name, soldier.in_mag, soldier.mags, int(soldier.wdata.mag)]
+			ammo_lbl.text = "ПЕРЕЗАРЯДКА..." if soldier.reloading > 0.0 else ""
 		elif soldier.slot == 1:
 			var h: Dictionary = Gear.HEAVY[soldier.eq.x]
 			var t := "%s • боєприпаси: %d" % [h.name, soldier.heavy_ammo]
@@ -1760,9 +1857,17 @@ func _update_hud(delta: float) -> void:
 				t += " • дистанція %d м%s" % [int(dist), "" if soldier.mortar_valid else " (поза межами)"]
 			ammo_lbl.text = t
 		else:
-			ammo_lbl.text = "Зброю сховано"
+			ammo_lbl.text = ""
 		if touch:
-			var bd := {"drone": soldier.drones, "reload": soldier.mags, "grenade": soldier.grenades}
+			var wi: String = {"ak74": "ak47", "aks74u": "ak", "m4": "m4", "svd": "svd"}.get(soldier.eq.w, "ak47")
+			touch.info = {
+				"slot": soldier.slot, "w_icon": wi, "in_mag": soldier.in_mag,
+				"reserve": soldier.mags * int(soldier.wdata.mag), "heavy": soldier.eq.x,
+				"heavy_ammo": soldier.heavy_ammo, "gren": soldier.grenades, "med": soldier.medkits,
+				"hp": my_hp, "armor": float(armor_dur) if soldier.eq.a != "none" else 0.0,
+				"heal": 1.0 - heal_left / Gear.MEDKIT_TIME if heal_left > 0.0 else 0.0,
+			}
+			var bd := {"drone": soldier.drones, "grenade": soldier.grenades}
 			if soldier.slot == 1:
 				bd["slot"] = soldier.heavy_ammo
 			touch.badges = bd
@@ -1777,6 +1882,8 @@ func _update_hud(delta: float) -> void:
 	elif absf(capture) > 1.0:
 		cap_txt = "Захоплення: %d%%" % int(absf(capture))
 	cap_lbl.text = cap_txt
+	if heal_left > 0.0:
+		heal_left = maxf(0.0, heal_left - delta)
 	if center_t > 0.0:
 		center_t -= delta
 		if center_t <= 0.0:
@@ -1815,25 +1922,25 @@ func _build_ui() -> void:
 	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui.add_child(hud)
 
-	score_lbl = _label(hud, 30, HORIZONTAL_ALIGNMENT_CENTER)
-	_place(score_lbl, Vector4(0, 0, 1, 0), Vector4(0, 10, 0, 50))
-	cap_lbl = _label(hud, 22, HORIZONTAL_ALIGNMENT_CENTER)
-	_place(cap_lbl, Vector4(0, 0, 1, 0), Vector4(0, 50, 0, 82))
+	score_lbl = _label(hud, 18, HORIZONTAL_ALIGNMENT_CENTER)
+	_place(score_lbl, Vector4(0, 0, 1, 0), Vector4(0, 62, 0, 86))
+	cap_lbl = _label(hud, 15, HORIZONTAL_ALIGNMENT_CENTER)
+	_place(cap_lbl, Vector4(0, 0, 1, 0), Vector4(0, 86, 0, 106))
 	hp_lbl = _label(hud, 34, HORIZONTAL_ALIGNMENT_LEFT)
-	_place(hp_lbl, Vector4(0, 0, 0, 0), Vector4(24, 16, 300, 60))
-	money_lbl = _label(hud, 26, HORIZONTAL_ALIGNMENT_LEFT)
+	hp_lbl.visible = false
+	money_lbl = _label(hud, 18, HORIZONTAL_ALIGNMENT_LEFT)
 	money_lbl.add_theme_color_override("font_color", Color(0.5, 1.0, 0.55))
-	_place(money_lbl, Vector4(0, 0, 0, 0), Vector4(24, 60, 300, 96))
-	feed_lbl = _label(hud, 18, HORIZONTAL_ALIGNMENT_RIGHT)
-	_place(feed_lbl, Vector4(1, 0, 1, 0), Vector4(-430, 240, -20, 400))
-	ammo_lbl = _label(hud, 26, HORIZONTAL_ALIGNMENT_CENTER)
-	_place(ammo_lbl, Vector4(0.5, 1, 0.5, 1), Vector4(-360, -64, 360, -20))
+	_place(money_lbl, Vector4(0, 0, 0, 0), Vector4(160, 80, 400, 104))
+	feed_lbl = _label(hud, 16, HORIZONTAL_ALIGNMENT_RIGHT)
+	_place(feed_lbl, Vector4(1, 0, 1, 0), Vector4(-430, 240, -20, 380))
+	ammo_lbl = _label(hud, 18, HORIZONTAL_ALIGNMENT_CENTER)
+	_place(ammo_lbl, Vector4(0.5, 1, 0.5, 1), Vector4(-360, -178, 360, -150))
 	center_lbl = _label(hud, 28, HORIZONTAL_ALIGNMENT_CENTER)
 	center_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD
 	_place(center_lbl, Vector4(0.5, 0.5, 0.5, 0.5), Vector4(-460, -190, 460, -110))
-	var cross := _label(hud, 34, HORIZONTAL_ALIGNMENT_CENTER)
-	cross.text = "+"
-	_place(cross, Vector4(0.5, 0.5, 0.5, 0.5), Vector4(-20, -26, 20, 22))
+	tophud = TopHud.new()
+	hud.add_child(tophud)
+	tophud.setup(self)
 	hud.hide()
 
 	minimap = HudMap.new()
@@ -2117,6 +2224,8 @@ func _refresh_shop() -> void:
 	var w := Gear.weight(eq, Gear.mag_capacity(eq), Gear.drone_slots(eq), Gear.heavy_slots(eq) if eq.x != "none" else 0)
 	shop_info.text = "Вага повного спорядження: %.1f кг • швидкість %d%% • з собою: магазинів %d, дронів %d, важких боєприпасів %d.\nКупівлі зберігаються. На базі зміни діють одразу, в бою — після відродження." % [w, int(Gear.speed_mult(w) * 100.0), Gear.mag_capacity(eq), Gear.drone_slots(eq), Gear.heavy_slots(eq) if eq.x != "none" else 0]
 	if shop_cat == "c":
+		_shop_row("Військова аптечка: +%d здоров'я за %d с. На складі: %d. Береш з собою до %d. Вага 0,5 кг." % [Gear.MEDKIT_HEAL, int(Gear.MEDKIT_TIME), int(profile.get("med", 0)), Gear.medkit_slots(eq)],
+			[["+1  $%d" % Gear.MEDKIT_PRICE, func(): buy("med", "", 1)], ["+5  $%d" % (Gear.MEDKIT_PRICE * 5), func(): buy("med", "", 5)]])
 		_shop_row("Ручна граната. На складі: %d. Береш з собою до %d (розгрузка і рюкзак). Вага 0,6 кг, радіус 7 м." % [int(profile.get("gren", 0)), Gear.grenade_slots(eq)],
 			[["+1  $%d" % Gear.GRENADE_PRICE, func(): buy("gren", "", 1)], ["+5  $%d" % (Gear.GRENADE_PRICE * 5), func(): buy("gren", "", 5)]])
 		_shop_row("FPV-дрон-камікадзе. На складі: %d. Береш з собою до %d (залежить від рюкзака). Вага 1,5 кг." % [int(profile.fpv), Gear.drone_slots(eq)],

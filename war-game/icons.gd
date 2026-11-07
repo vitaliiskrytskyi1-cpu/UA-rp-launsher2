@@ -140,6 +140,27 @@ static func draw(ci: CanvasItem, name: String, c: Vector2, s: float, col: Color)
 			ci.draw_line(c + Vector2(s * 0.02, -s * 0.16), c + Vector2(-s * 0.26, -s * 0.1), col, w)
 			for i in 3:
 				ci.draw_line(c + Vector2(-s * 0.48, -s * 0.2 + i * s * 0.14), c + Vector2(-s * 0.36, -s * 0.2 + i * s * 0.14), col, w * 0.6)
+		"walk":
+			ci.draw_circle(c + Vector2(0, -s * 0.36), s * 0.1, col)
+			ci.draw_line(c + Vector2(0, -s * 0.24), c + Vector2(0, s * 0.08), col, w * 1.3)
+			ci.draw_line(c + Vector2(0, s * 0.08), c + Vector2(-s * 0.12, s * 0.44), col, w * 1.2)
+			ci.draw_line(c + Vector2(0, s * 0.08), c + Vector2(s * 0.1, s * 0.44), col, w * 1.2)
+			ci.draw_line(c + Vector2(0, -s * 0.16), c + Vector2(-s * 0.14, s * 0.06), col, w)
+			ci.draw_line(c + Vector2(0, -s * 0.16), c + Vector2(s * 0.14, s * 0.04), col, w)
+		"skull":
+			ci.draw_circle(c + Vector2(0, -s * 0.06), s * 0.3, col)
+			ci.draw_rect(Rect2(c + Vector2(-s * 0.16, s * 0.12), Vector2(s * 0.32, s * 0.2)), col)
+			ci.draw_circle(c + Vector2(-s * 0.12, -s * 0.06), s * 0.08, Color(0, 0, 0, 0.85))
+			ci.draw_circle(c + Vector2(s * 0.12, -s * 0.06), s * 0.08, Color(0, 0, 0, 0.85))
+		"people":
+			ci.draw_circle(c + Vector2(-s * 0.16, -s * 0.18), s * 0.12, col)
+			ci.draw_circle(c + Vector2(s * 0.16, -s * 0.18), s * 0.12, col)
+			ci.draw_rect(Rect2(c + Vector2(-s * 0.32, -s * 0.02), Vector2(s * 0.28, s * 0.36)), col)
+			ci.draw_rect(Rect2(c + Vector2(s * 0.04, -s * 0.02), Vector2(s * 0.28, s * 0.36)), col)
+		"clock":
+			ci.draw_arc(c, s * 0.36, 0.0, TAU, 28, col, w)
+			ci.draw_line(c, c + Vector2(0, -s * 0.24), col, w)
+			ci.draw_line(c, c + Vector2(s * 0.18, 0), col, w)
 		"shoulder":
 			ci.draw_circle(c + Vector2(0, -s * 0.12), s * 0.14, col)
 			ci.draw_arc(c + Vector2(0, s * 0.3), s * 0.3, PI, TAU, 16, col, w * 1.2)

@@ -141,6 +141,7 @@ static func _build_scan(parent: Node, visuals: bool) -> Node3D:
 	for s in [-1.0, 1.0]:
 		_col_box(w, Vector3(1.0, 300.0, hz * 2.0), Vector3(s * (hx - 1.5), 0.0, 0.0))
 		_col_box(w, Vector3(hx * 2.0, 300.0, 1.0), Vector3(0.0, 0.0, s * (hz - 1.5)))
+	_scan_trenches(w, visuals)
 	if visuals:
 		_env(w, 0.004)
 		var we := w.get_child(w.get_child_count() - 2) as WorldEnvironment
@@ -193,6 +194,53 @@ static func _build_hgrid(faces: PackedVector3Array) -> void:
 				var k := gz * _hw + gx
 				if y > _hgrid[k]:
 					_hgrid[k] = y
+
+
+## Лінії укріплень на скані: бруствери з мішків з піском і дерев'яні стійки, по рельєфу.
+## По одній лінії перед кожною базою (поперек напрямку на точку) і дві короткі біля центру.
+static func _scan_trenches(w: Node3D, visuals: bool) -> void:
+	var m_bag := tex_mat("hessian_230", Color(0.56, 0.5, 0.36), 0.8, Color(0.85, 0.78, 0.6))
+	var m_plank := tex_mat("weathered_brown_planks", Color(0.42, 0.32, 0.22), 0.45)
+	var m_mud := tex_mat("brown_mud_02", Color(0.3, 0.24, 0.17), 0.4)
+	var lines: Array = []
+	var span := minf(float(cur.half), float(cur.hz))
+	for t in 2:
+		var bp := base_pos(t)
+		var c := bp * 0.5
+		var dir := (-bp).normalized()
+		var side := Vector2(-dir.y, dir.x)
+		var ln := clampf(span * 0.7, 14.0, 60.0)
+		lines.append([c - side * ln * 0.5, c + side * ln * 0.5, dir])
+		# коротка позиція біля точки захоплення
+		var c2 := bp.normalized() * float(cur.cap) * 1.7
+		lines.append([c2 - side * 7.0, c2 + side * 7.0, dir])
+	for l in lines:
+		var a: Vector2 = l[0]
+		var b: Vector2 = l[1]
+		var face: Vector2 = l[2]   # куди дивиться бруствер (на противника)
+		var n := int(a.distance_to(b) / 2.0)
+		for i in n:
+			var p := a.lerp(b, (i + 0.5) / float(n))
+			# зигзаг траншеї
+			var zz := 0.6 if (i / 3) % 2 == 0 else -0.6
+			p += face * zz
+			var y := ground_y(w, p.x, p.y, -9999.0)
+			if y < -9000.0:
+				continue
+			var yb := ground_y(w, p.x - face.x * 1.6, p.y - face.y * 1.6, y)
+			if absf(yb - y) > 1.4:
+				continue
+			var ang := atan2(b.x - a.x, b.y - a.y)
+			var front := Vector3(p.x, y + 0.45, p.y)
+			_box(w, Vector3(0.9, 1.0, 2.15), front, m_bag, visuals, Vector3(0.0, ang, 0.0))
+			if visuals:
+				# верхній ряд мішків і дошки задньої стінки
+				_vis_box(w, Vector3(0.7, 0.28, 2.1), front + Vector3(0.0, 0.62, 0.0), m_bag, Vector3(0.0, ang, 0.08))
+				var back := Vector3(p.x - face.x * 1.5, yb + 0.25, p.y - face.y * 1.5)
+				_vis_box(w, Vector3(0.12, 0.6, 2.1), back, m_plank, Vector3(0.0, ang, 0.0))
+				_vis_box(w, Vector3(1.4, 0.08, 2.1), Vector3((p.x + back.x) * 0.5, (y + yb) * 0.5 + 0.02, (p.y + back.z) * 0.5), m_mud, Vector3(0.0, ang, 0.0))
+				if i % 2 == 0:
+					_vis_box(w, Vector3(0.1, 1.3, 0.1), front + Vector3(face.x * -0.5, 0.2, face.y * -0.5), m_plank)
 
 
 ## Позначки баз і кільце точки захоплення (після того, як світ у дереві сцени).
