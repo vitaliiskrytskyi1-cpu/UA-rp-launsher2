@@ -39,6 +39,22 @@ jobs:
           mv tpl/templates/* ~/.local/share/godot/export_templates/${GODOT}.stable/
           ./godot --version
 
+      - name: Download CC0 textures (Poly Haven)
+        working-directory: war-game
+        run: |
+          mkdir -p tex
+          for t in forrest_ground_01 dry_mud_field_001 brown_mud_02 weathered_brown_planks hessian_230 hessian_380 damaged_plaster roof_planks bark_brown_02 forest_leaves_02; do
+            for kind in diff nor_gl; do
+              f="${t}_${kind}_1k.jpg"
+              if ! curl -sfSL -o "tex/$f" "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/$t/$f"; then
+                echo "missing $f"; rm -f "tex/$f"; continue
+              fi
+              nm=0; [ "$kind" = "nor_gl" ] && nm=1
+              printf '[remap]\n\nimporter="texture"\ntype="CompressedTexture2D"\n\n[deps]\n\nsource_file="res://tex/%s"\n\n[params]\n\ncompress/mode=2\ncompress/high_quality=false\ncompress/lossy_quality=0.7\ncompress/hdr_compression=1\ncompress/normal_map=%d\ncompress/channel_pack=0\nmipmaps/generate=true\nmipmaps/limit=-1\nroughness/mode=0\nprocess/fix_alpha_border=true\nprocess/size_limit=1024\ndetect_3d/compress_to=0\n' "$f" "$nm" > "tex/$f.import"
+            done
+          done
+          ls -la tex | head -40
+
       - name: Import project
         working-directory: war-game
         run: |
